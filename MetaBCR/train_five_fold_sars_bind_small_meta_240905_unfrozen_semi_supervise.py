@@ -4,7 +4,7 @@ Yu Chen
 2024.06.21
 '''
 import argparse
-import config_five_fold_sars_neu_meta_240910_unfrozen_semi_supervise as _cfg_
+import config_five_fold_sars_bind_small_meta_240905_unfrozen_semi_supervise as _cfg_
 
 if _cfg_.model == 'XBCR_ACNN':
     if _cfg_.use_onehot:
@@ -74,7 +74,7 @@ def font(out, gt):
     return ff
 
 
-def implement(model, dataloader, wolabel=False, mode=None):
+def implement(model, dataloader, wolabel=False):
     '''
     Model implement function.
         input: model & dataloader
@@ -86,19 +86,11 @@ def implement(model, dataloader, wolabel=False, mode=None):
     with torch.no_grad():
         for i, data in enumerate(dataloader, 0):
             # data pre-process
-            if mode == "meta":
-                input_ids_ab_v = data['input_ids_ab_v_origin'].to(_cfg_.device)
-                attention_mask_ab_v = data['attention_mask_ab_v_origin'].to(_cfg_.device)
-                input_ids_ab_l = data['input_ids_ab_l_origin'].to(_cfg_.device)
-                attention_mask_ab_l = data['attention_mask_ab_l_origin'].to(_cfg_.device)
-                input_ids_ag = data['input_ids_ag'].to(_cfg_.device)
-            else:
-                print("find '' failed. Go find ''")
-                input_ids_ab_v = data['input_ids_ab_v'].to(_cfg_.device)
-                attention_mask_ab_v = data['attention_mask_ab_v'].to(_cfg_.device)
-                input_ids_ab_l = data['input_ids_ab_l'].to(_cfg_.device)
-                attention_mask_ab_l = data['attention_mask_ab_l'].to(_cfg_.device)
-                input_ids_ag = data['input_ids_ag'].to(_cfg_.device)
+            input_ids_ab_v = data['input_ids_ab_v'].to(_cfg_.device)
+            attention_mask_ab_v = data['attention_mask_ab_v'].to(_cfg_.device)
+            input_ids_ab_l = data['input_ids_ab_l'].to(_cfg_.device)
+            attention_mask_ab_l = data['attention_mask_ab_l'].to(_cfg_.device)
+            input_ids_ag = data['input_ids_ag'].to(_cfg_.device)
             # prediction
             outputs = model(ag_x=input_ids_ag, ab_x=input_ids_ab_v,
                             attention_mask_ab_v=attention_mask_ab_v,
@@ -153,7 +145,7 @@ def fast_learn(model, sup_criterion, fast_opt, teacher_model=None, unsup_criteri
 
         # print('sup: ', torch.mean(supervised_loss).item(), ', unsup: ', torch.mean(unsupervised_loss).item())
 
-        loss = torch.mean(supervised_loss + _cfg_.unsup_loss_weight * unsupervised_loss)
+        loss = torch.mean(supervised_loss + _cfg_.unsup_loss_weight*unsupervised_loss)
         # print(supervised_loss, torch.mean(supervised_loss))
         # print(unsupervised_loss)
         # print(loss)
@@ -173,7 +165,7 @@ def fast_learn(model, sup_criterion, fast_opt, teacher_model=None, unsup_criteri
 ##################################################################
 
 def train(num_fold=None):
-    all_folds = [0, 1, 2, 3, 4] if num_fold == None else [num_fold]
+    all_folds = [0, 2, 3, 1, 4] if num_fold==None else [num_fold]
 
     print('Start training fold # {} on device {}'.format(all_folds, _cfg_.device))
 
@@ -181,27 +173,28 @@ def train(num_fold=None):
 
         #################### data path #####################
 
-        fdir_train_sars_1 = _cfg_.root_dir + f'data/20240909_rbd_neut_trainmeta_data/20240909-abag_sars-neu-new_trainmeta_pos_fold{fold}_unique_randomseed-3.xlsx'
-        fdir_train_sars_0 = _cfg_.root_dir + f'data/20240909_rbd_neut_trainmeta_data/20240909-abag_sars-neu-new_trainmeta_neg_fold{fold}_unique_randomseed-3.xlsx'
+        fdir_train_sars_1 = _cfg_.root_dir + f'data/20240611_rbd_flu_hiv_trainmeta_data/20240612-abag_sars-bind_trainmeta-A1A11_pos.xlsx'
+        fdir_train_sars_0 = _cfg_.root_dir + f'data/20240611_rbd_flu_hiv_trainmeta_data/20240612-abag_sars-bind_trainmeta-A1A11_neg.xlsx'
 
-        fdir_train_nolabel = _cfg_.root_dir + 'data/20240909_nc_new_sars_neut_all_bcrs.csv'
+        fdir_train_nolabel = _cfg_.root_dir + 'data/1222_merged_A1-A11_BCR.xlsx'
 
-        fdir_val_sars_0 = _cfg_.root_dir + f'data/20240909_rbd_neut_trainmeta_data/20240909-abag_sars-neu-new_valaug_neg_fold{fold}_unique_randomseed-3.xlsx'
-        fdir_val_sars_1 = _cfg_.root_dir + f'data/20240909_rbd_neut_trainmeta_data/20240909-abag_sars-neu-new_val_pos_fold{fold}_unique_randomseed-3.xlsx'
+        fdir_val_sars_0 = fdir_train_sars_0
+        fdir_val_sars_1 = fdir_train_sars_1
 
         fdir_train_non_experiment = _cfg_.root_dir + "data/240408_nega_all_processed_data_for_train.xlsx"  ### 240316
         fdir_train_non_experiment_sars = _cfg_.root_dir + "data/240314_neg_data_for_sars.xlsx"  ### 240316
         fdir_train_non_experiment_hiv = _cfg_.root_dir + "data/240314_neg_data_for_hiv.xlsx"  ### 240316
         fdir_train_non_experiment_flu = _cfg_.root_dir + "data/240314_neg_data_for_flu.xlsx"  ### 240316
 
-        fdir_tst_neu_0909 = _cfg_.root_dir + "data/20240909_nc_new_sars_neut_benchmark.xlsx"
+        fdir_tst_sars = _cfg_.root_dir + f'data/20240510_rbd_flu_hiv_test_data/sars_unique_test_randomseed-{_cfg_.hiv_split_seed}.xlsx'
+        fdir_tst_bind_0611 = _cfg_.root_dir + "data/Benchmark_rbd_bind_0611.xlsx"
 
         _RESULT_DIR = _cfg_.root_dir + 'rslt-meta_{}_{}_{}_{}_fold{}_meta{}-semi/'.format(_cfg_.model,
-                                                                                          _cfg_.date,
-                                                                                          _cfg_.train_mode,
-                                                                                          _cfg_.prop,
-                                                                                          fold,
-                                                                                          _cfg_.benchmark)  # output dir
+                                                                                     _cfg_.date,
+                                                                                     _cfg_.train_mode,
+                                                                                     _cfg_.prop,
+                                                                                     fold,
+                                                                                     _cfg_.benchmark)  # output dir
 
         if not os.path.exists(_RESULT_DIR):
             print('Cannot find [RESULT DIR], created a new one.')
@@ -235,8 +228,7 @@ def train(num_fold=None):
                                                          'rand_sample_rand_combine',
                                                          'no_label'
                                                          ],
-                                            n_samples=max(data_train_sars_1.shape[0] + data_train_sars_0.shape[0],
-                                                          1024),
+                                            n_samples=max(data_train_sars_1.shape[0] + data_train_sars_0.shape[0],1024),
                                             is_rand_sample=True, onehot=_cfg_.use_onehot, rand_shift=True)
 
         # train_loader = DataLoader_n(dataset=train_set, batch_size=_batch_sz, num_workers=0, shuffle=False)
@@ -252,22 +244,22 @@ def train(num_fold=None):
                              rand_shift=False)
         # val_loader = DataLoader_n(dataset=val_set, batch_size=_batch_sz, num_workers=0, shuffle=False)
         val_loader = DataLoader_n(dataset=val_set, batch_size=_cfg_.batch_sz, shuffle=False)
+        meta_loader = DataLoader_n(dataset=val_set, batch_size=_cfg_.batch_sz, shuffle=False)
 
-        # meta_loader = DataLoader_n(dataset=val_set, batch_size=_cfg_.batch_sz, shuffle=False)
-        meta_set = Ab_Dataset_mean_teacher(datalist=[data_val_hiv_1, data_val_hiv_0],
-                                           proportions=_cfg_.meta_prop,
-                                           sample_func=['rand_sample', 'rand_sample'],
-                                           n_samples=256, is_rand_sample=True, onehot=_cfg_.use_onehot,
-                                           rand_shift=False)
-        meta_loader = DataLoader_n(dataset=meta_set, batch_size=_cfg_.batch_sz, shuffle=False)
-
-        data_test_neu_0909 = pd.read_excel(fdir_tst_neu_0909)
-        test_name_0909 = 'TEST_NEU_0909'
-        test_set_neu_0909 = Ab_Dataset(datalist=[data_test_neu_0909], proportions=[None], sample_func=['sample'],
-                                       n_samples=data_test_neu_0909.shape[0], is_rand_sample=False,
-                                       onehot=_cfg_.use_onehot, rand_shift=False)
-        test_loader_neu_0909 = DataLoader_n(dataset=test_set_neu_0909, batch_size=_cfg_.batch_sz,
-                                            num_workers=0, shuffle=False)
+        data_test_bind_0611 = pd.read_excel(fdir_tst_bind_0611)
+        test_name_0611 = 'TEST_BIND_0611'
+        test_set_bind_0611 = Ab_Dataset(datalist=[data_test_bind_0611], proportions=[None], sample_func=['sample'],
+                                        n_samples=data_test_bind_0611.shape[0], is_rand_sample=False,
+                                        onehot=_cfg_.use_onehot, rand_shift=False)
+        test_loader_bind_0611 = DataLoader_n(dataset=test_set_bind_0611, batch_size=_cfg_.batch_sz,
+                                             num_workers=0, shuffle=False)
+        
+        data_test_rbd = read_table(fdir_tst_sars)
+        test_name = 'TEST_RBD'
+        test_set_rbd = Ab_Dataset(datalist=[data_test_rbd], proportions=[None], sample_func=['sample'],
+                                  n_samples=data_test_rbd.shape[0], is_rand_sample=False,
+                                  onehot=_cfg_.use_onehot, rand_shift=False)
+        test_loader_rbd = DataLoader_n(dataset=test_set_rbd, batch_size=_cfg_.batch_sz, num_workers=0, shuffle=False)
 
         #################### train ####################
 
@@ -353,15 +345,13 @@ def train(num_fold=None):
 
                 # fast learning
                 fast_loss, fast_suploss, fast_unsuploss = fast_learn(fast_model, supervise_criterion, fast_optimizer,
-                                                                     model, unsupervise_criterion,
-                                                                     X=[input_ids_ab_v, attention_mask_ab_v,
-                                                                        input_ids_ab_l, attention_mask_ab_l,
-                                                                        input_ids_ag,
-                                                                        input_ids_ab_v_origin,
-                                                                        attention_mask_ab_v_origin,
-                                                                        input_ids_ab_l_origin,
-                                                                        attention_mask_ab_l_origin],
-                                                                     Y=labels, mask=has_label_mask)
+                                                                       model, unsupervise_criterion,
+                                                                       X=[input_ids_ab_v, attention_mask_ab_v,
+                                                                          input_ids_ab_l, attention_mask_ab_l,
+                                                                          input_ids_ag,
+                                                                          input_ids_ab_v_origin, attention_mask_ab_v_origin, 
+                                                                          input_ids_ab_l_origin, attention_mask_ab_l_origin],
+                                                                       Y=labels, mask=has_label_mask)
                 if i % _cfg_.meta_update_iter == 0:
                     # zero the meta-parameter gradients
                     optimizer.zero_grad()
@@ -425,7 +415,7 @@ def train(num_fold=None):
                     eval_confusion_tr = eval_confusion(confusion_mat_tr)
                     # validation
                     model.eval()
-                    predictions_val, labels_val, lossweight_val = implement(model, meta_loader, mode="meta")
+                    predictions_val, labels_val, lossweight_val = implement(model, meta_loader)
                     model.train()
                     # get validate confusion matrix
                     confusion_mat_val = get_confusion_mat(
@@ -483,16 +473,24 @@ def train(num_fold=None):
                     model_name = f'{_cfg_.date}_{epoch}_fold{fold}-maml'
 
                     model.eval()
-                    predictions_tst, labels_tst, lossweight_tst = implement(model, test_loader_neu_0909)
+                    predictions_tst, labels_tst, lossweight_tst = implement(model, test_loader_bind_0611)
                     model.train()
 
-                    data_test_neu_0909['output'] = np.around(np.array(predictions_tst)).tolist()
-                    data_test_neu_0909['predict'] = predictions_tst
-                    data_test_neu_0909.to_excel(
-                        _cfg_.root_dir + f"{_cfg_.date_step}_rbd_neu_results_semi/{test_name_0909}_{model_name}_rbd_binding_test.xlsx",
+                    data_test_bind_0611['output'] = np.around(np.array(predictions_tst)).tolist()
+                    data_test_bind_0611['predict'] = predictions_tst
+                    data_test_bind_0611.to_excel(
+                        _cfg_.root_dir + f"{_cfg_.date_step}_rbd_bind_results_semi/{test_name_0611}_{model_name}_rbd_binding_test.xlsx",
                         index=False,
                         header=True)
 
+                    model.eval()
+                    predictions_tst, labels_tst, lossweight_tst = implement(model, test_loader_rbd, )
+                    model.train()
+
+                    data_test_rbd['output'] = np.around(np.array(predictions_tst)).tolist()
+                    data_test_rbd['predict'] = predictions_tst
+                    data_test_rbd.to_excel(f"{_cfg_.date_step}_rbd_bind_results_semi/{test_name}_{model_name}_rbd_binding_test.xlsx",
+                                           index=False, header=True)
             if _cfg_.benchmark == 'f1':
                 if (epoch >= _cfg_.saveaft or epoch == 0) and (eval_confusion_val[6] > best_val_f1):
                     _best_val_epoch, best_val_acc, best_val_prec, best_val_f1 = epoch, eval_confusion_val[0], \
@@ -502,15 +500,26 @@ def train(num_fold=None):
 
                     model_name = f'{_cfg_.date}_{epoch}_fold{fold}-maml'
                     model.eval()
-                    predictions_tst, labels_tst, lossweight_tst = implement(model, test_loader_neu_0909)
+                    predictions_tst, labels_tst, lossweight_tst = implement(model, test_loader_bind_0611)
                     model.train()
 
-                    data_test_neu_0909['output'] = np.around(np.array(predictions_tst)).tolist()
-                    data_test_neu_0909['predict'] = predictions_tst
-                    data_test_neu_0909.to_excel(
-                        _cfg_.root_dir + f"{_cfg_.date_step}_rbd_neu_results_semi/{test_name_0909}_{model_name}_rbd_binding_test.xlsx",
+                    data_test_bind_0611['output'] = np.around(np.array(predictions_tst)).tolist()
+                    data_test_bind_0611['predict'] = predictions_tst
+                    data_test_bind_0611.to_excel(
+                        _cfg_.root_dir + f"{_cfg_.date_step}_rbd_bind_results_semi/{test_name_0611}_{model_name}_rbd_binding_test.xlsx",
                         index=False,
                         header=True)
+
+                    model.eval()
+                    predictions_tst, labels_tst, lossweight_tst = implement(model, test_loader_rbd, )
+                    model.train()
+
+                    data_test_rbd['output'] = np.around(np.array(predictions_tst)).tolist()
+                    data_test_rbd['predict'] = predictions_tst
+                    data_test_rbd.to_excel(
+                        f"{_cfg_.date_step}_rbd_bind_results_semi/{test_name}_{model_name}_rbd_binding_test.xlsx",
+                        index=False, header=True)
+
             else:
                 if (epoch >= _cfg_.saveaft or epoch == 0) and (eval_confusion_val[-1] > best_val_f1):
                     _best_val_epoch, best_val_acc, best_val_prec, best_val_f1 = epoch, eval_confusion_val[0], \
@@ -531,6 +540,7 @@ def train(num_fold=None):
 
 
 if __name__ == '__main__':
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--fold', type=int, help="# of fold")
     args = parser.parse_args()
