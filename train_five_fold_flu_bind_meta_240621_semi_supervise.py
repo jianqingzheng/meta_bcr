@@ -4,37 +4,22 @@ Yu Chen
 2024.06.21
 '''
 
-import config_five_fold_flu_bind_meta_240621_semi_supervise as _cfg_
-
-if _cfg_.model == 'XBCR_ACNN':
-    if _cfg_.use_onehot:
-        from lm_gnn_model_jz import XBCR_ACNN_woBERT_meta as Model
-    else:
-        # from lm_gnn_model_jz import XBCR_ACNN_meta as Model
-        from lm_gnn_model_jz0508_unfrozen import XBCR_ACNN_dense_meta as Model
-        from lm_gnn_model_jz0508_unfrozen import Adaptive_Regulariz
-elif _cfg_.model == 'DeepBCR_ACEXN_protbert':
-    from lm_gnn_model_jz import DeepBCR_ACEXN_protbert as Model
-else:
-    print('Wrong model {}'.format(_cfg_.model))
-    raise ValueError
-
 import os
-import torch
 import torch.nn as nn
 import torch.nn.init as init
 from torch.utils.data import DataLoader as DataLoader_n
-import numpy as np
 import pandas as pd
 import random
 
-from lm_gnn_model_jz import Adaptive_Regulariz
-from dataset_flu import Ab_Dataset, Ab_Dataset_mean_teacher
-from metrics import *
-from losses import *
-
-# from lm_gnn_model_jz0508 import get_frozen_bert, get_unfrozen_bert
-from lm_gnn_model_jz0508_unfrozen import Adaptive_Regulariz
+from Config.config import get_config
+from MetaBCR.lm_gnn_model_jz import XBCR_ACNN_woBERT_meta
+from MetaBCR.lm_gnn_model_jz0508_unfrozen import XBCR_ACNN_dense_meta
+from MetaBCR.lm_gnn_model_jz import DeepBCR_ACEXN_protbert
+from MetaBCR.lm_gnn_model_jz import Adaptive_Regulariz
+from MetaBCR.dataset_flu import Ab_Dataset, Ab_Dataset_mean_teacher
+import MetaBCR.metrics as metrics
+from MetaBCR.losses import *
+from MetaBCR.lm_gnn_model_jz0508_unfrozen import Adaptive_Regulariz
 
 
 #################### put implement funcs here ####################
@@ -47,7 +32,7 @@ def read_table(file):
     return data
 
 
-def get_model():
+def get_model(Model, _cfg_):
     return Model(extra_dense=True, block_num=8,
                  freeze_bert=_cfg_.freeze_bert,
                  ab_freeze_layer_count=_cfg_.freeze_layer_count,
@@ -74,7 +59,7 @@ def font(out, gt):
     return ff
 
 
-def implement(model, dataloader, wolabel=False):
+def implement(model, dataloader, _cfg_, wolabel=False):
     '''
     Model implement function.
         input: model & dataloader
@@ -105,7 +90,7 @@ def implement(model, dataloader, wolabel=False):
     return predictions_main_tr, labels_main_tr, lossweight_main_tr
 
 
-def get_optimizer(net, state=None):
+def get_optimizer(net, _cfg_, state=None):
     optimizer = torch.optim.Adam(net.parameters(), lr=_cfg_.lr, betas=(0, 0.999))
     if state is not None: optimizer.load_state_dict(state)
     return optimizer
@@ -116,14 +101,15 @@ def set_learning_rate(optimizer, lr):
         param_group['lr'] = lr
 
 
-def model_deep_duplicate(model):
-    dup_model = get_model()
+def model_deep_duplicate(model, Model, _cfg_):
+    dup_model = get_model(Model=Model, _cfg_=_cfg_)
     dup_model.to(_cfg_.device)
     dup_model.load_state_dict(model.state_dict())
     return dup_model
 
 
-def fast_learn(model, sup_criterion, fast_opt, teacher_model=None, unsup_criterion=None, X=None, Y=None, mask=None):
+def fast_learn(model, sup_criterion, fast_opt, _cfg_, teacher_model=None, unsup_criterion=None, X=None, Y=None,
+               mask=None):
     model.train()
     fast_opt.zero_grad()
     outputs = model(ag_x=X[4], ab_x=X[0], attention_mask_ab_v=X[1],
@@ -145,7 +131,7 @@ def fast_learn(model, sup_criterion, fast_opt, teacher_model=None, unsup_criteri
 
         # print('sup: ', torch.mean(supervised_loss).item(), ', unsup: ', torch.mean(unsupervised_loss).item())
 
-        loss = torch.mean(supervised_loss + _cfg_.unsup_loss_weight*unsupervised_loss)
+        loss = torch.mean(supervised_loss + _cfg_.unsup_loss_weight * unsupervised_loss)
         # print(supervised_loss, torch.mean(supervised_loss))
         # print(unsupervised_loss)
         # print(loss)
@@ -164,37 +150,50 @@ def fast_learn(model, sup_criterion, fast_opt, teacher_model=None, unsup_criteri
 
 ##################################################################
 
-def train(num_fold=None):
-    all_folds = [0,1,2,3,4] if num_fold==None else [num_fold]
+def train(num_fold=None, _cfg_=None):
+    if num_fold == None:
+        all_folds = [0, 1, 2, 3, 4]
+        print("INFO [ train ] : Got num_folds=None, will train all folds")
+    else:
+        all_folds = [num_fold]
+        print(f"INFO [ train ] : Train fold #{num_fold}")
+
+    if _cfg_.model == 'XBCR_ACNN':
+        if _cfg_.use_onehot:
+            Model = XBCR_ACNN_woBERT_meta
+        else:
+            Model = XBCR_ACNN_dense_meta
+    elif _cfg_.model == 'DeepBCR_ACEXN_protbert':
+        Model = DeepBCR_ACEXN_protbert
+    else:
+        print(f'ERROR [ train ] : Wrong model {_cfg_.model}')
+        raise ValueError
+
     for fold in all_folds:
 
         #################### data path #####################
 
-        fdir_train_flu_1 = f'data/20240611_rbd_flu_hiv_trainmeta_data/20240621-abag_flu_trainmeta_pos_fold{fold}_randomseed-3.xlsx'
-        fdir_train_flu_0 = f'data/20240611_rbd_flu_hiv_trainmeta_data/20240621-abag_flu_trainmeta_neg_fold{fold}_randomseed-3.xlsx'
+        fdir_train_flu_1 = f'Data/20240611_rbd_flu_hiv_trainmeta_data/20240621-abag_flu_trainmeta_pos_fold{fold}_randomseed-3.xlsx'
+        fdir_train_flu_0 = f'Data/20240611_rbd_flu_hiv_trainmeta_data/20240621-abag_flu_trainmeta_neg_fold{fold}_randomseed-3.xlsx'
+        fdir_train_nolabel = 'Data/1025_all_merged_QIV_bcrs.xlsx'
 
-        fdir_train_nolabel = _cfg_.root_dir + 'data/1025_all_merged_QIV_bcrs.xlsx'
+        fdir_val_flu_0 = f'Data/20240611_rbd_flu_hiv_trainmeta_data/20240621-abag_flu_valmeta_neg_fold{fold}_randomseed-3.xlsx'
+        fdir_val_flu_1 = f'Data/20240611_rbd_flu_hiv_trainmeta_data/20240621-abag_flu_valmeta_pos_fold{fold}_randomseed-3.xlsx'
 
-        fdir_val_flu_0 = f'data/20240611_rbd_flu_hiv_trainmeta_data/20240621-abag_flu_valmeta_neg_fold{fold}_randomseed-3.xlsx'
-        fdir_val_flu_1 = f'data/20240611_rbd_flu_hiv_trainmeta_data/20240621-abag_flu_valmeta_pos_fold{fold}_randomseed-3.xlsx'
+        fdir_train_non_experiment = "Data/240618_nega_forflu_processed_data.xlsx"  ### 240316
+        fdir_train_non_experiment_sars = "Data/240314_neg_data_for_sars.xlsx"  ### 240316
+        fdir_train_non_experiment_hiv = "Data/240314_neg_data_for_hiv.xlsx"  ### 240316
+        fdir_train_non_experiment_flu = "Data/240314_neg_data_for_flu.xlsx"  ### 240316
+        fdir_tst_flu = f'Data/20240510_rbd_flu_hiv_test_data/flu_unique_test_randomseed-{_cfg_.hiv_split_seed}.xlsx'
+        _fdir_tst_bind_BNT = "Data/Benchmark_flu_bind_0612.xlsx"
+        _fdir_tst_bind_clone = "Data/Benchmark_flu_bind_240621_clone.xlsx"
 
-        fdir_train_non_experiment = _cfg_.root_dir + "data/240618_nega_forflu_processed_data.xlsx"  ### 240316
-        fdir_train_non_experiment_sars = _cfg_.root_dir + "data/240314_neg_data_for_sars.xlsx"  ### 240316
-        fdir_train_non_experiment_hiv = _cfg_.root_dir + "data/240314_neg_data_for_hiv.xlsx"  ### 240316
-        fdir_train_non_experiment_flu = _cfg_.root_dir + "data/240314_neg_data_for_flu.xlsx"  ### 240316
-        fdir_tst_flu = _cfg_.root_dir + f'data/20240510_rbd_flu_hiv_test_data/flu_unique_test_randomseed-{_cfg_.hiv_split_seed}.xlsx'
-
-        _RESULT_DIR = _cfg_.root_dir + 'rslt-meta_{}_{}_{}_{}_fold{}_meta{}-semi/'.format(_cfg_.model,
-                                                                                         _cfg_.date,
-                                                                                         _cfg_.train_mode,
-                                                                                         _cfg_.prop,
-                                                                                         fold,
-                                                                                         _cfg_.benchmark)  # output dir
+        _RESULT_DIR = f'Results/{_cfg_.train_mode}/rslt-meta_{_cfg_.model}_{_cfg_.date}_{_cfg_.train_mode}_{_cfg_.prop}_fold{fold}_meta{_cfg_.benchmark}-semi/'
 
         if not os.path.exists(_RESULT_DIR):
-            print('Cannot find [RESULT DIR], created a new one.')
+            print('INFO [ train ] : Cannot find <RESULT DIR>, created a new one.')
             os.makedirs(_RESULT_DIR)
-        print('[RESULT DIR]: {}'.format(_RESULT_DIR))
+        print('INFO [ train ] : <RESULT DIR>: {}'.format(_RESULT_DIR))
 
         random.seed(_cfg_.rand_seed)
 
@@ -211,9 +210,9 @@ def train(num_fold=None):
         data_train_nolabel = read_table(fdir_train_nolabel)
 
         train_set = Ab_Dataset_mean_teacher(datalist=[data_train_flu_1,
-                                                     data_train_flu_0,
-                                                     [data_train_flu_1, data_train_non_experiment],
-                                                     [data_train_flu_1, data_train_non_experiment_flu],
+                                                      data_train_flu_0,
+                                                      [data_train_flu_1, data_train_non_experiment],
+                                                      [data_train_flu_1, data_train_non_experiment_flu],
                                                       [data_train_nolabel, data_train_flu_1]
                                                       ],
                                             proportions=_cfg_.prop,
@@ -223,7 +222,7 @@ def train(num_fold=None):
                                                          'rand_sample_rand_combine',
                                                          'no_label'
                                                          ],
-                                            n_samples=max(data_train_flu_1.shape[0] + data_train_flu_0.shape[0],1024),
+                                            n_samples=max(data_train_flu_1.shape[0] + data_train_flu_0.shape[0], 1024),
                                             is_rand_sample=True, onehot=_cfg_.use_onehot, rand_shift=True)
 
         # train_loader = DataLoader_n(dataset=train_set, batch_size=_batch_sz, num_workers=0, shuffle=False)
@@ -237,7 +236,6 @@ def train(num_fold=None):
         val_set = Ab_Dataset(datalist=[data_val], proportions=[None], sample_func=['sample'],
                              n_samples=data_val.shape[0], is_rand_sample=False, onehot=_cfg_.use_onehot,
                              rand_shift=False)
-        # val_loader = DataLoader_n(dataset=val_set, batch_size=_batch_sz, num_workers=0, shuffle=False)
         val_loader = DataLoader_n(dataset=val_set, batch_size=_cfg_.batch_sz, shuffle=False)
         meta_loader = DataLoader_n(dataset=val_set, batch_size=_cfg_.batch_sz, shuffle=False)
 
@@ -248,7 +246,6 @@ def train(num_fold=None):
                                   onehot=_cfg_.use_onehot, rand_shift=False)
         test_loader_flu = DataLoader_n(dataset=test_set_flu, batch_size=_cfg_.batch_sz, num_workers=0, shuffle=False)
 
-        _fdir_tst_bind_BNT = _cfg_.root_dir + "data/Benchmark_flu_bind_0612.xlsx"
         data_test_bind_BNT = read_table(_fdir_tst_bind_BNT)
         test_name_BNT = 'TEST'
         test_set_bind_BNT = Ab_Dataset(datalist=[data_test_bind_BNT], proportions=[None], sample_func=['sample'],
@@ -257,7 +254,6 @@ def train(num_fold=None):
 
         test_loader_bind_BNT = DataLoader_n(dataset=test_set_bind_BNT, batch_size=_cfg_.batch_sz, num_workers=0,
                                             shuffle=False)
-        _fdir_tst_bind_clone = _cfg_.root_dir + "data/Benchmark_flu_bind_240621_clone.xlsx"
         data_test_bind_clone = read_table(_fdir_tst_bind_clone)
         test_name_clone = 'TEST-clone'
         test_set_bind_clone = Ab_Dataset(datalist=[data_test_bind_clone], proportions=[None], sample_func=['sample'],
@@ -269,24 +265,23 @@ def train(num_fold=None):
 
         #################### train ####################
 
-        print('\n\n Start training...')
-        model = get_model()
+        print('INFO [ train ] : Start training ...')
+        model = get_model(Model=Model, _cfg_=_cfg_)
         # model = nn.DataParallel(model)
         model.to(_cfg_.device)
 
         # load state dict
         if _cfg_.pretrain_model_dir is not None:
-            # model.load_state_dict(torch.load(_pretrain_model_dir))
-            model.load_state_dict(torch.load(_cfg_.pretrain_model_dir.format(fold)), strict=False)  # 0107
+            pretrain_model_dir = os.path.join(_cfg_.pretrain_model_dir, f'fold{fold}.pth')
+            model.load_state_dict(torch.load(pretrain_model_dir), strict=False)  # 0107
+            print(f'INFO [ train ] : Loaded pretrain model params from {pretrain_model_dir}')
         else:
             model.apply(init_weights)  # Yu 2024/1/4
-        # else:
-        #     torch.nn.init.normal_(model.weight,0.00001,0.1**7)
-        # define a loss function and an optimizer
+            print('INFO [ train ] : No pretrained models, initialize model weights')
+
         supervise_criterion = nn.BCELoss(reduction='none')
         val_criterion = nn.BCELoss()
         unsupervise_criterion = nn.MSELoss(reduction='none')
-        # optimizer = optim.Adam(model.parameters(), lr=_lr)
         optimizer = torch.optim.SGD(model.parameters(), lr=_cfg_.lr)
         # adaptive regularize
         adaptive_regular = Adaptive_Regulariz(velocity=_cfg_.regul_v,
@@ -312,7 +307,7 @@ def train(num_fold=None):
         # fast_model = model_deep_duplicate(model)
         fast_model = model.clone_meta(device=_cfg_.device)
 
-        fast_optimizer = get_optimizer(fast_model, None)
+        fast_optimizer = get_optimizer(fast_model, _cfg_, None)
         # fast_optimizer = torch.optim.Adam(fast_model.parameters(), lr=_lr, betas=(0, 0.999))
         # fast_optimizer = torch.optim.SGD(fast_model.parameters(), lr=_lr)
         train_acc = []
@@ -350,14 +345,14 @@ def train(num_fold=None):
                 attention_mask_ab_l_origin = data['attention_mask_ab_l_origin'].to(_cfg_.device)
 
                 # fast learning
-                fast_loss = fast_learn(fast_model, supervise_criterion, fast_optimizer,
-                                        model, unsupervise_criterion,
-                                        X=[input_ids_ab_v, attention_mask_ab_v,
-                                            input_ids_ab_l, attention_mask_ab_l,
-                                            input_ids_ag,
-                                            input_ids_ab_v_origin, attention_mask_ab_v_origin, 
-                                            input_ids_ab_l_origin, attention_mask_ab_l_origin],
-                                        Y=labels, mask=has_label_mask)
+                fast_loss = fast_learn(fast_model, supervise_criterion, fast_optimizer, _cfg_,
+                                       model, unsupervise_criterion,
+                                       X=[input_ids_ab_v, attention_mask_ab_v,
+                                          input_ids_ab_l, attention_mask_ab_l,
+                                          input_ids_ag,
+                                          input_ids_ab_v_origin, attention_mask_ab_v_origin,
+                                          input_ids_ab_l_origin, attention_mask_ab_l_origin],
+                                       Y=labels, mask=has_label_mask)
                 # update slow model
                 if i % _cfg_.meta_update_iter == 0:
                     # zero the meta-parameter gradients
@@ -399,7 +394,7 @@ def train(num_fold=None):
 
                     # fast_optimizer = torch.optim.SGD(fast_model.parameters(), lr=_lr)
                     fast_state = fast_optimizer.state_dict()  # save fast optimizer state
-                    fast_optimizer = get_optimizer(fast_model, state=fast_state)  ####
+                    fast_optimizer = get_optimizer(fast_model, _cfg_, state=fast_state)  ####
 
                     # store predictions and labels
                     predictions_tr.extend(outputs[0].cpu().view(-1).tolist())
@@ -412,23 +407,26 @@ def train(num_fold=None):
 
                 if i % _cfg_.print_step == (_cfg_.print_step - 1):
                     print(
-                        f'[{epoch}, {i + 1:5d}] loss: {running_loss / _cfg_.print_step:.6f} wregul: {weight_regulariz_neu:.3f}')
+                        f'INFO [ train ] : Training '
+                        f'Epoch {epoch} Iter {i + 1:5d}, '
+                        f'loss: {running_loss / _cfg_.print_step:.6f}, '
+                        f'wregul: {weight_regulariz_neu:.3f}')
                     running_loss = 0.0
 
                 # meta
                 if global_iter % _cfg_.regul_step == (_cfg_.regul_step - 1):
                     # get train confusion matrix
-                    confusion_mat_tr = get_confusion_mat(predictions_tr, labels_tr, has_label_mask_tr)
-                    eval_confusion_tr = eval_confusion(confusion_mat_tr)
+                    confusion_mat_tr = metrics.get_confusion_mat(predictions_tr, labels_tr, has_label_mask_tr)
+                    eval_confusion_tr = metrics.eval_confusion(confusion_mat_tr)
                     # validation
                     model.eval()
-                    predictions_val, labels_val, lossweight_val = implement(model, meta_loader)
+                    predictions_val, labels_val, lossweight_val = implement(model, meta_loader, _cfg_)
                     model.train()
                     # get validate confusion matrix
-                    confusion_mat_val = get_confusion_mat(
+                    confusion_mat_val = metrics.get_confusion_mat(
                         [predictions_val[i] for (i, v) in enumerate(lossweight_val) if v == 1],
                         [labels_val[i] for (i, v) in enumerate(lossweight_val) if v == 1])
-                    eval_confusion_val = eval_confusion(confusion_mat_val)
+                    eval_confusion_val = metrics.eval_confusion(confusion_mat_val)
                     # update regularize weight
                     # w_reg_neu_acc = adaptive_regular.update_weight(-eval_confusion_tr[0], -eval_confusion_val[0])
                     # w_reg_neu_ppv = adaptive_regular.update_weight(-eval_confusion_tr[3], -eval_confusion_val[3])
@@ -443,8 +441,8 @@ def train(num_fold=None):
                     # weight_regulariz_neu = adaptive_regular.update_weight(-eval_confusion_tr[6], -eval_confusion_val[6])
 
             # get train confusion matrix
-            confusion_mat_tr = get_confusion_mat(predictions_tr, labels_tr, has_label_mask_tr)
-            eval_confusion_tr = eval_confusion(confusion_mat_tr)
+            confusion_mat_tr = metrics.get_confusion_mat(predictions_tr, labels_tr, has_label_mask_tr)
+            eval_confusion_tr = metrics.eval_confusion(confusion_mat_tr)
             train_loss.append(running_loss / len(train_loader))
             train_epoch.append(epoch)
             train_acc.append(eval_confusion_tr[0])
@@ -452,13 +450,13 @@ def train(num_fold=None):
             train_recall.append(eval_confusion_tr[1])
             # validation
             model.eval()
-            predictions_val, labels_val, lossweight_val = implement(model, val_loader)
+            predictions_val, labels_val, lossweight_val = implement(model, val_loader, _cfg_)
             model.train()
             # get validate confusion matrix
-            confusion_mat_val = get_confusion_mat(
+            confusion_mat_val = metrics.get_confusion_mat(
                 [predictions_val[i] for (i, v) in enumerate(lossweight_val) if v == 1],
                 [labels_val[i] for (i, v) in enumerate(lossweight_val) if v == 1])
-            eval_confusion_val = eval_confusion(confusion_mat_val)
+            eval_confusion_val = metrics.eval_confusion(confusion_mat_val)
 
             val_loss.append(
                 val_criterion(torch.Tensor(predictions_val), torch.Tensor(labels_val)).item())
@@ -466,7 +464,8 @@ def train(num_fold=None):
             val_precision.append(eval_confusion_val[3])
             val_recall.append(eval_confusion_val[1])
 
-            print(f"[Val] epoch{epoch}, acc: {eval_confusion_val[0]:.2f}, "
+            print(f"INFO [ train ] : Validation "
+                  f"Epoch {epoch}, acc: {eval_confusion_val[0]:.2f}, "
                   f"ppv: {eval_confusion_val[3]:.2f}, sns: {eval_confusion_val[1]:.2f}")
             if _cfg_.benchmark == 'acc':
                 if (epoch >= _cfg_.saveaft or epoch == 0) and (eval_confusion_val[0] > best_val_acc):
@@ -477,21 +476,21 @@ def train(num_fold=None):
 
                     model_name = f'{_cfg_.date}_{epoch}_fold{fold}-maml'
                     model.eval()
-                    predictions_tst, labels_tst, lossweight_tst = implement(model, test_loader_bind_BNT, )
+                    predictions_tst, labels_tst, lossweight_tst = implement(model, test_loader_bind_BNT, _cfg_)
                     model.train()
                     data_test_bind_BNT['output'] = np.around(np.array(predictions_tst)).tolist()
                     data_test_bind_BNT['predict'] = predictions_tst
                     data_test_bind_BNT.to_excel(
-                        f"{_cfg_.date_step}_flu_bind_results_semi/{test_name_BNT}_{model_name}_flu_binding_test.xlsx",
+                        f"{_RESULT_DIR}{test_name_BNT}_{model_name}_flu_binding_test.xlsx",
                         index=False, header=True)
 
                     model.eval()
-                    predictions_tst, labels_tst, lossweight_tst = implement(model, test_loader_bind_clone, )
+                    predictions_tst, labels_tst, lossweight_tst = implement(model, test_loader_bind_clone, _cfg_)
                     model.train()
                     data_test_bind_clone['output'] = np.around(np.array(predictions_tst)).tolist()
                     data_test_bind_clone['predict'] = predictions_tst
                     data_test_bind_clone.to_excel(
-                        f"{_cfg_.date_step}_flu_bind_results_semi/{test_name_clone}_{model_name}_flu_binding_test.xlsx",
+                        f"{_RESULT_DIR}{test_name_clone}_{model_name}_flu_binding_test.xlsx",
                         index=False, header=True)
             if _cfg_.benchmark == 'f1':
                 if (epoch >= _cfg_.saveaft or epoch == 0) and (eval_confusion_val[6] > best_val_f1):
@@ -502,12 +501,12 @@ def train(num_fold=None):
 
                     model_name = f'{_cfg_.date}_{epoch}_fold{fold}-maml'
                     model.eval()
-                    predictions_tst, labels_tst, lossweight_tst = implement(model, test_loader_bind_BNT, )
+                    predictions_tst, labels_tst, lossweight_tst = implement(model, test_loader_bind_BNT, _cfg_)
                     model.train()
                     data_test_bind_BNT['output'] = np.around(np.array(predictions_tst)).tolist()
                     data_test_bind_BNT['predict'] = predictions_tst
                     data_test_bind_BNT.to_excel(
-                        f"{_cfg_.date_step}_flu_bind_results_semi/{test_name_BNT}_{model_name}_flu_binding_test.xlsx",
+                        f"{_RESULT_DIR}{test_name_BNT}_{model_name}_flu_binding_test.xlsx",
                         index=False, header=True)
             else:
                 if (epoch >= _cfg_.saveaft or epoch == 0) and (eval_confusion_val[-1] > best_val_f1):
@@ -521,12 +520,14 @@ def train(num_fold=None):
                                        'val_loss': val_loss, 'val_acc': val_acc,
                                        'val_precision': val_precision, 'val_recall': val_recall, })
             train_file.to_excel(f'{_RESULT_DIR}{model_name}_train_file.xlsx', index=False)
-        print(f'Finished Training, best model from epoch {_best_val_epoch}, '
-              f'f1 {best_val_f1:.2f}, acc {best_val_acc:.2f}, ppv {best_val_prec:.2f}.')
-        print('... ...')
+        print(f'INFO [ train ] : Finished Training, '
+              f'best model from epoch {_best_val_epoch}, '
+              f'f1 {best_val_f1:.2f}, acc {best_val_acc:.2f}, ppv {best_val_prec:.2f}')
 
         #################### test ####################
 
 
 if __name__ == '__main__':
-    train()
+    configure = get_config("Config/config_five_fold_flu_bind_meta_240621_semi_supervise.json")
+
+    train(num_fold=None, _cfg_=configure)

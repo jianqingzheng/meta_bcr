@@ -1,19 +1,11 @@
 import os
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import Dataset as Dataset_n
 from torch.utils.data import DataLoader as DataLoader_n
-import numpy as np
 import pandas as pd
-import random
-from lm_gnn_model_jz0508_unfrozen import XBCR_ACNN_dense_meta as Model
+from MetaBCR.lm_gnn_model_jz0508_unfrozen import XBCR_ACNN_dense_meta as Model
 import argparse
 
-from lm_gnn_model_jz import Adaptive_Regulariz
 from dataset import Ab_Dataset  # Ab_Dataset_augment, Ab_Dataset_augment_cross, Ab_Dataset_wo_label
-from metrics import *
-from losses import *
+from MetaBCR.losses import *
 
 parser = argparse.ArgumentParser()
 

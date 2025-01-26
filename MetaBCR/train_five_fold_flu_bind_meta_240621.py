@@ -7,13 +7,9 @@ import os
 import torch
 import torch.nn as nn
 import torch.nn.init as init
-import torch.optim as optim
-from torch.utils.data import Dataset as Dataset_n
 from torch.utils.data import DataLoader as DataLoader_n
-import numpy as np
 import pandas as pd
 import random
-import copy
 
 # date = '0614-abag3-finetunedbatch-extradense-noclamp-acc-unfrozenbert-1221'
 # date = '0614-abag3-finetunedbatch-extradense-noclamp-acc-unfrozenbert-Influenza-1221'
@@ -65,19 +61,19 @@ _rand_seed = 2023
 
 if _model == 'XBCR_ACNN':
     if _use_onehot:
-        from lm_gnn_model_jz import XBCR_ACNN_woBERT_meta as Model
+        from MetaBCR.lm_gnn_model_jz import XBCR_ACNN_woBERT_meta as Model
     else:
         # from lm_gnn_model_jz import XBCR_ACNN_meta as Model
-        from lm_gnn_model_jz0508_unfrozen import XBCR_ACNN_dense_meta as Model
-        from lm_gnn_model_jz0508_unfrozen import Adaptive_Regulariz
+        from MetaBCR.lm_gnn_model_jz0508_unfrozen import XBCR_ACNN_dense_meta as Model
+        from MetaBCR.lm_gnn_model_jz0508_unfrozen import Adaptive_Regulariz
 elif _model == 'DeepBCR_ACEXN_protbert':
-    from lm_gnn_model_jz import DeepBCR_ACEXN_protbert as Model
+    from MetaBCR.lm_gnn_model_jz import DeepBCR_ACEXN_protbert as Model
 else:
     print('Wrong model {}'.format(_model))
     raise ValueError
 from dataset import Ab_Dataset  # Ab_Dataset_augment, Ab_Dataset_augment_cross, Ab_Dataset_wo_label
-from metrics import *
-from losses import *
+from MetaBCR.metrics import *
+from MetaBCR.losses import *
 
 # ARGUMENTS
 

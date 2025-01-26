@@ -8,33 +8,31 @@ import config_five_fold_flu_neu_meta_240903_unfrozen_semi_supervise as _cfg_
 
 if _cfg_.model == 'XBCR_ACNN':
     if _cfg_.use_onehot:
-        from lm_gnn_model_jz import XBCR_ACNN_woBERT_meta as Model
+        from MetaBCR.lm_gnn_model_jz import XBCR_ACNN_woBERT_meta as Model
     else:
         # from lm_gnn_model_jz import XBCR_ACNN_meta as Model
-        from lm_gnn_model_jz0508_unfrozen import XBCR_ACNN_dense_meta as Model
-        from lm_gnn_model_jz0508_unfrozen import Adaptive_Regulariz
+        from MetaBCR.lm_gnn_model_jz0508_unfrozen import XBCR_ACNN_dense_meta as Model
+        from MetaBCR.lm_gnn_model_jz0508_unfrozen import Adaptive_Regulariz
 elif _cfg_.model == 'DeepBCR_ACEXN_protbert':
-    from lm_gnn_model_jz import DeepBCR_ACEXN_protbert as Model
+    from MetaBCR.lm_gnn_model_jz import DeepBCR_ACEXN_protbert as Model
 else:
     print('Wrong model {}'.format(_cfg_.model))
     raise ValueError
 
 import os
-import torch
 import torch.nn as nn
 import torch.nn.init as init
 from torch.utils.data import DataLoader as DataLoader_n
-import numpy as np
 import pandas as pd
 import random
 
-from lm_gnn_model_jz import Adaptive_Regulariz
+from MetaBCR.lm_gnn_model_jz import Adaptive_Regulariz
 from dataset_flu import Ab_Dataset, Ab_Dataset_mean_teacher
-from metrics import *
-from losses import *
+from MetaBCR.metrics import *
+from MetaBCR.losses import *
 
 # from lm_gnn_model_jz0508 import get_frozen_bert, get_unfrozen_bert
-from lm_gnn_model_jz0508_unfrozen import Adaptive_Regulariz
+from MetaBCR.lm_gnn_model_jz0508_unfrozen import Adaptive_Regulariz
 
 
 #################### put implement funcs here ####################

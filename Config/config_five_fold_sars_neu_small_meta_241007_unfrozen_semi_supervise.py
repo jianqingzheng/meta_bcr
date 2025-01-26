@@ -19,8 +19,6 @@ use_onehot = False
 
 os.makedirs(f'{date_step}_rbd_neu_small_results_semi', exist_ok=True)
 
-from lm_gnn_model_jz0508_unfrozen import XBCR_ACNN_dense_meta as Model
-
 bert_name = '20240531_BNT_epoch5'
 
 #################### data path #####################
