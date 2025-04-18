@@ -521,9 +521,6 @@ class Ab_Dataset_mean_teacher(Dataset_n):
             seq_ab_l_aug = self.seq_augmentation(seq_ab_l)
         else:
             seq_ab_v_aug, seq_ab_l_aug = seq_ab_v, seq_ab_l
-        
-        # print('light    : ', seq_ab_l, '\nlight aug: ', seq_ab_l_aug)
-        # print('heavy    : ', seq_ab_v, '\nheavy aug: ', seq_ab_v_aug)
 
         ids_ag = np.zeros([max_seq_antig, 20])
         # ids_ag = np.zeros([800, 30])

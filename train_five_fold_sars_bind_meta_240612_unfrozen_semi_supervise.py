@@ -38,33 +38,46 @@ def train(num_fold=None, _cfg_=None):
         raise ValueError
 
     for fold in all_folds:
-        
-        result_path = f'Results/{_cfg_.train_mode}/rslt-meta_{_cfg_.model}_{_cfg_.date}_{_cfg_.train_mode}_{_cfg_.prop}_fold{fold}_meta{_cfg_.benchmark}-semi/'
-        if not os.path.exists(result_path):
+
+        #################### data path #####################
+
+        fdir_train_sars_1 = f'Data/20240611_rbd_flu_hiv_trainmeta_data/20240621-abag_sars_trainmeta_pos_fold{fold}_randomseed-3.xlsx'
+        fdir_train_sars_0 = f'Data/20240611_rbd_flu_hiv_trainmeta_data/20240621-abag_sars_trainmeta_neg_fold{fold}_randomseed-3.xlsx'
+        fdir_train_nolabel = 'Data/1222_merged_A1-A11_BCR.xlsx'
+
+        fdir_val_sars_0 = f'Data/20240611_rbd_flu_hiv_trainmeta_data/20240702-abag_sars_valnega_neg_fold{fold}_randomseed-3.xlsx'
+        fdir_val_sars_1 = f'Data/20240611_rbd_flu_hiv_trainmeta_data/20240702-abag_sars_valnega_pos_fold{fold}_randomseed-3.xlsx'
+
+        fdir_train_non_experiment = "Data/240408_nega_all_processed_data_for_train.xlsx"  ### 240316
+        fdir_train_non_experiment_sars = "Data/240314_neg_data_for_sars.xlsx"  ### 240316
+
+        fdir_tst_sars = f'Data/20240510_rbd_flu_hiv_test_data/sars_unique_test_randomseed-{_cfg_.hiv_split_seed}.xlsx'
+        fdir_tst_bind_0611 = "Data/Benchmark_rbd_bind_0611.xlsx"
+
+        _RESULT_DIR = f'Results/{_cfg_.train_mode}/rslt-meta_{_cfg_.model}_{_cfg_.date}_{_cfg_.train_mode}_{_cfg_.prop}_fold{fold}_meta{_cfg_.benchmark}-semi/'
+
+        if not os.path.exists(_RESULT_DIR):
             print('INFO [ train ] : Cannot find <RESULT DIR>, created a new one.')
-            os.makedirs(result_path)
-        print('INFO [ train ] : <RESULT DIR>: {}'.format(result_path))
+            os.makedirs(_RESULT_DIR)
+        print('INFO [ train ] : <RESULT DIR>: {}'.format(_RESULT_DIR))
 
         random.seed(_cfg_.rand_seed)
 
         #################### dataloader ####################
 
-        data_train_1 = utils.read_table(_cfg_.fdir_train_1.format(fold))
-        data_train_0 = utils.read_table(_cfg_.fdir_train_0.format(fold))
+        data_train_sars_1 = utils.read_table(fdir_train_sars_1)
+        data_train_sars_0 = utils.read_table(fdir_train_sars_0)
 
-        # data_train_non_experiment = utils.read_table(_cfg_.fdir_train_non_experiment_list[0])
-        # data_train_non_experiment_flu = utils.read_table(_cfg_.fdir_train_non_experiment_list[1])
-        data_train_non_experiment_list = []
-        for fdir_train_non_exp in _cfg_.fdir_train_non_experiment_list:
-            data_train_non_experiment_list.append(utils.read_table(fdir_train_non_exp))
+        data_train_non_experiment = utils.read_table(fdir_train_non_experiment)
+        data_train_non_experiment_sars = utils.read_table(fdir_train_non_experiment_sars)
 
-        data_train_nolabel = utils.read_table(_cfg_.fdir_train_nolabel)
+        data_train_nolabel = utils.read_table(fdir_train_nolabel)
 
-        train_set = Ab_Dataset_mean_teacher(datalist=[data_train_1,
-                                                      data_train_0,
-                                                      [data_train_1, data_train_non_experiment_list[0]],
-                                                      [data_train_1, data_train_non_experiment_list[1]],
-                                                      [data_train_nolabel, data_train_1]
+        train_set = Ab_Dataset_mean_teacher(datalist=[data_train_sars_1,
+                                                      data_train_sars_0,
+                                                      [data_train_sars_1, data_train_non_experiment],
+                                                      [data_train_sars_1, data_train_non_experiment_sars],
+                                                      [data_train_nolabel, data_train_sars_1]
                                                       ],
                                             proportions=_cfg_.prop,
                                             sample_func=['rand_sample',
@@ -73,35 +86,42 @@ def train(num_fold=None, _cfg_=None):
                                                          'rand_sample_rand_combine',
                                                          'no_label'
                                                          ],
-                                            n_samples=max(data_train_1.shape[0] + data_train_0.shape[0], 1024),
+                                            n_samples=max(data_train_sars_1.shape[0] + data_train_sars_0.shape[0],1024),
                                             is_rand_sample=True, onehot=_cfg_.use_onehot, rand_shift=True)
 
+        # train_loader = DataLoader_n(dataset=train_set, batch_size=_batch_sz, num_workers=0, shuffle=False)
         train_loader = DataLoader_n(dataset=train_set, batch_size=_cfg_.batch_sz, shuffle=False)
 
-        data_val_1 = utils.read_table(_cfg_.fdir_val_1.format(fold))
-        data_val_0 = utils.read_table(_cfg_.fdir_val_0.format(fold))
+        data_val_hiv_1 = utils.read_table(fdir_val_sars_1)
+        data_val_hiv_0 = utils.read_table(fdir_val_sars_0)
 
-        data_val = pd.concat([data_val_1, data_val_0], ignore_index=True)
+        data_val = pd.concat([data_val_hiv_1, data_val_hiv_0], ignore_index=True)
 
         val_set = Ab_Dataset(datalist=[data_val], proportions=[None], sample_func=['sample'],
                              n_samples=data_val.shape[0], is_rand_sample=False, onehot=_cfg_.use_onehot,
                              rand_shift=False)
+        # val_loader = DataLoader_n(dataset=val_set, batch_size=_batch_sz, num_workers=0, shuffle=False)
         val_loader = DataLoader_n(dataset=val_set, batch_size=_cfg_.batch_sz, shuffle=False)
         meta_loader = DataLoader_n(dataset=val_set, batch_size=_cfg_.batch_sz, shuffle=False)
 
-        tst_loader_dict = {}
-        for k,v in _cfg_.fdir_tst_dict.items():
-            data_tst = utils.read_table(v)
-            tst_set = Ab_Dataset(datalist=[data_tst], proportions=[None], sample_func=['sample'],
-                                n_samples=data_tst.shape[0], is_rand_sample=False,
-                                onehot=_cfg_.use_onehot, rand_shift=False)
-            tst_loader = DataLoader_n(dataset=tst_set, batch_size=_cfg_.batch_sz, num_workers=0,
-                                        shuffle=False)
-            tst_loader_dict[k] = [data_tst, tst_loader]
+        data_test_bind_0611 = pd.read_excel(fdir_tst_bind_0611)
+        test_name_0611 = 'TEST_BIND_0611'
+        test_set_bind_0611 = Ab_Dataset(datalist=[data_test_bind_0611], proportions=[None], sample_func=['sample'],
+                                        n_samples=data_test_bind_0611.shape[0], is_rand_sample=False,
+                                        onehot=_cfg_.use_onehot, rand_shift=False)
+        test_loader_bind_0611 = DataLoader_n(dataset=test_set_bind_0611, batch_size=_cfg_.batch_sz,
+                                             num_workers=0, shuffle=False)
+        
+        data_test_rbd = utils.read_table(fdir_tst_sars)
+        test_name = 'TEST_RBD'
+        test_set_rbd = Ab_Dataset(datalist=[data_test_rbd], proportions=[None], sample_func=['sample'],
+                                  n_samples=data_test_rbd.shape[0], is_rand_sample=False,
+                                  onehot=_cfg_.use_onehot, rand_shift=False)
+        test_loader_rbd = DataLoader_n(dataset=test_set_rbd, batch_size=_cfg_.batch_sz, num_workers=0, shuffle=False)
 
         #################### train ####################
 
-        print('INFO [ train ] : Start training ...')
+        print('\n\n Start training...')
         model = utils.get_model(Model=Model, _cfg_=_cfg_)
         model.to(_cfg_.device)
 
@@ -141,7 +161,7 @@ def train(num_fold=None, _cfg_=None):
         # fast model
         fast_model = model.clone_meta(device=_cfg_.device)
 
-        fast_optimizer = utils.get_optimizer(fast_model, _cfg_, None)
+        fast_optimizer = utils.get_optimizer(fast_model, None)
         train_acc = []
         train_loss = []
         train_epoch = []
@@ -157,6 +177,7 @@ def train(num_fold=None, _cfg_=None):
             predictions_tr, labels_tr, has_label_mask_tr = [], [], []
             weight_regulariz = [weight_regulariz_neu, 0.]
 
+            # meta_lr = _lr * 1e5 * (1.01 - epoch / float(_num_epochs))
             meta_lr = _cfg_.lr * 1e4 * (1.01 - epoch / float(_cfg_.num_epochs))
             utils.set_learning_rate(optimizer, meta_lr)
 
@@ -176,14 +197,14 @@ def train(num_fold=None, _cfg_=None):
                 attention_mask_ab_l_origin = data['attention_mask_ab_l_origin'].to(_cfg_.device)
 
                 # fast learning
-                fast_loss = utils.fast_learn(fast_model, supervise_criterion, fast_optimizer, _cfg_,
-                                       model, unsupervise_criterion,
-                                       X=[input_ids_ab_v, attention_mask_ab_v,
-                                          input_ids_ab_l, attention_mask_ab_l,
-                                          input_ids_ag,
-                                          input_ids_ab_v_origin, attention_mask_ab_v_origin,
-                                          input_ids_ab_l_origin, attention_mask_ab_l_origin],
-                                       Y=labels, mask=has_label_mask)
+                fast_loss, fast_suploss, fast_unsuploss = utils.fast_learn(fast_model, supervise_criterion, fast_optimizer,
+                                                                       model, unsupervise_criterion,
+                                                                       X=[input_ids_ab_v, attention_mask_ab_v,
+                                                                          input_ids_ab_l, attention_mask_ab_l,
+                                                                          input_ids_ag,
+                                                                          input_ids_ab_v_origin, attention_mask_ab_v_origin, 
+                                                                          input_ids_ab_l_origin, attention_mask_ab_l_origin],
+                                                                       Y=labels, mask=has_label_mask)
                 # update slow model
                 if i % _cfg_.meta_update_iter == 0:
                     # zero the meta-parameter gradients
@@ -280,83 +301,74 @@ def train(num_fold=None, _cfg_=None):
                     _best_val_epoch, best_val_acc, best_val_prec, best_val_f1 = epoch, eval_confusion_val[0], \
                                                                                 eval_confusion_val[3], \
                                                                                 eval_confusion_val[6]
-                    torch.save(model.state_dict(), f'{result_path}epoch_{epoch}.pth')
+                    torch.save(model.state_dict(), f'{_RESULT_DIR}epoch_{epoch}.pth')
 
-                    for tst_name,tst_v in tst_loader_dict.items():
-                        data_tst, tst_ldr = tst_v
-                        model_name = f'{_cfg_.date}_{epoch}_fold{fold}-maml'
-                        model.eval()
-                        predictions_tst, labels_tst, lossweight_tst = utils.implement(model, tst_ldr, _cfg_)
-                        model.train()
-                        data_tst['output'] = np.around(np.array(predictions_tst)).tolist()
-                        data_tst['predict'] = predictions_tst
-                        data_tst.to_excel(
-                            f"{result_path}{tst_name}_{model_name}_flu_binding_test.xlsx",
-                            index=False, header=True)
-                    
-                    # model_name = f'{_cfg_.date}_{epoch}_fold{fold}-maml'
-                    # model.eval()
-                    # predictions_tst, labels_tst, lossweight_tst = utils.implement(model, tst_loader, _cfg_)
-                    # model.train()
-                    # data_tst['output'] = np.around(np.array(predictions_tst)).tolist()
-                    # data_tst['predict'] = predictions_tst
-                    # data_tst.to_excel(
-                    #     f"{_RESULT_DIR}{test_name_BNT}_{model_name}_flu_binding_test.xlsx",
-                    #     index=False, header=True)
+                    model_name = f'{_cfg_.date}_{epoch}_fold{fold}-maml'
+                    model.eval()
+                    predictions_tst, labels_tst, lossweight_tst = utils.implement(model, test_loader_bind_0611, _cfg_)
+                    model.train()
 
-                    # model.eval()
-                    # predictions_tst, labels_tst, lossweight_tst = utils.implement(model, test_loader_bind_clone, _cfg_)
-                    # model.train()
-                    # data_test_bind_clone['output'] = np.around(np.array(predictions_tst)).tolist()
-                    # data_test_bind_clone['predict'] = predictions_tst
-                    # data_test_bind_clone.to_excel(
-                    #     f"{_RESULT_DIR}{test_name_clone}_{model_name}_flu_binding_test.xlsx",
-                    #     index=False, header=True)
+                    data_test_bind_0611['output'] = np.around(np.array(predictions_tst)).tolist()
+                    data_test_bind_0611['predict'] = predictions_tst
+                    data_test_bind_0611.to_excel(
+                        _cfg_.root_dir + f"{_cfg_.date_step}_rbd_bind_results_semi/{test_name_0611}_{model_name}_rbd_binding_test.xlsx",
+                        index=False,
+                        header=True)
+
+                    model.eval()
+                    predictions_tst, labels_tst, lossweight_tst = utils.implement(model, test_loader_rbd, _cfg_)
+                    model.train()
+
+                    data_test_rbd['output'] = np.around(np.array(predictions_tst)).tolist()
+                    data_test_rbd['predict'] = predictions_tst
+                    data_test_rbd.to_excel(f"{_cfg_.date_step}_rbd_bind_results_semi/{test_name}_{model_name}_rbd_binding_test.xlsx",
+                                           index=False, header=True)
             if _cfg_.benchmark == 'f1':
                 if (epoch >= _cfg_.saveaft or epoch == 0) and (eval_confusion_val[6] > best_val_f1):
                     _best_val_epoch, best_val_acc, best_val_prec, best_val_f1 = epoch, eval_confusion_val[0], \
                                                                                 eval_confusion_val[3], \
                                                                                 eval_confusion_val[6]
-                    torch.save(model.state_dict(), f'{result_path}epoch_{epoch}.pth')
+                    torch.save(model.state_dict(), f'{_RESULT_DIR}epoch_{epoch}.pth')
 
-                    for tst_name, tst_v in tst_loader_dict.items():
-                        data_tst, tst_ldr = tst_v
-                        model_name = f'{_cfg_.date}_{epoch}_fold{fold}-maml'
-                        model.eval()
-                        predictions_tst, labels_tst, lossweight_tst = utils.implement(model, tst_ldr, _cfg_)
-                        model.train()
-                        data_tst['output'] = np.around(np.array(predictions_tst)).tolist()
-                        data_tst['predict'] = predictions_tst
-                        data_tst.to_excel(
-                            f"{result_path}{tst_name}_{model_name}_flu_binding_test.xlsx",
-                            index=False, header=True)
-                        
-                    # model_name = f'{_cfg_.date}_{epoch}_fold{fold}-maml'
-                    # model.eval()
-                    # predictions_tst, labels_tst, lossweight_tst = utils.implement(model, tst_loader, _cfg_)
-                    # model.train()
-                    # data_tst['output'] = np.around(np.array(predictions_tst)).tolist()
-                    # data_tst['predict'] = predictions_tst
-                    # data_tst.to_excel(
-                    #     f"{_RESULT_DIR}{test_name_BNT}_{model_name}_flu_binding_test.xlsx",
-                    #     index=False, header=True)
+                    model_name = f'{_cfg_.date}_{epoch}_fold{fold}-maml'
+                    model.eval()
+                    predictions_tst, labels_tst, lossweight_tst = utils.implement(model, test_loader_bind_0611, _cfg_)
+                    model.train()
+
+                    data_test_bind_0611['output'] = np.around(np.array(predictions_tst)).tolist()
+                    data_test_bind_0611['predict'] = predictions_tst
+                    data_test_bind_0611.to_excel(
+                        _cfg_.root_dir + f"{_cfg_.date_step}_rbd_bind_results_semi/{test_name_0611}_{model_name}_rbd_binding_test.xlsx",
+                        index=False,
+                        header=True)
+
+                    model.eval()
+                    predictions_tst, labels_tst, lossweight_tst = utils.implement(model, test_loader_rbd, _cfg_)
+                    model.train()
+
+                    data_test_rbd['output'] = np.around(np.array(predictions_tst)).tolist()
+                    data_test_rbd['predict'] = predictions_tst
+                    data_test_rbd.to_excel(
+                        f"{_cfg_.date_step}_rbd_bind_results_semi/{test_name}_{model_name}_rbd_binding_test.xlsx",
+                        index=False, header=True)
+
             else:
                 if (epoch >= _cfg_.saveaft or epoch == 0) and (eval_confusion_val[-1] > best_val_f1):
                     _best_val_epoch, best_val_acc, best_val_prec, best_val_f1 = epoch, eval_confusion_val[0], \
                                                                                 eval_confusion_val[3], \
                                                                                 eval_confusion_val[6]
-                    torch.save(model.state_dict(), f'{result_path}epoch_{epoch}.pth')
+                    torch.save(model.state_dict(), f'{_RESULT_DIR}epoch_{epoch}.pth')
 
             train_file = pd.DataFrame({'epoch': train_epoch, 'train_loss': train_loss, 'train_acc': train_acc,
                                        'train_precision': train_precision, 'train_recall': train_recall,
                                        'val_loss': val_loss, 'val_acc': val_acc,
                                        'val_precision': val_precision, 'val_recall': val_recall, })
-            train_file.to_excel(f'{result_path}{model_name}_train_file.xlsx', index=False)
+            train_file.to_excel(f'{_RESULT_DIR}train_file.xlsx', index=False)
         print(f'INFO [ train ] : Finished Training, '
               f'best model from epoch {_best_val_epoch}, '
               f'f1 {best_val_f1:.2f}, acc {best_val_acc:.2f}, ppv {best_val_prec:.2f}')
 
 if __name__ == '__main__':
-    configure = get_config("Config/config_five_fold_flu_bind_meta_240621_semi_supervise.json")
+    configure = get_config("Config/config_five_fold_sars_bind_meta_240612_unfrozen_semi_supervise.json")
 
     train(num_fold=None, _cfg_=configure)

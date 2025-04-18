@@ -1,0 +1,8 @@
+{
+  "test_name": "TEST-flu-bind",
+  "fdir_tst_flu": "Data/1025_all_merged_QIV_bcrs.xlsx",
+  "fdir_ags": "Data/flu-antigen_to_predict1.xlsx",
+  "dir_model_to_test": "Models/240822-flu-bind/0822_fold0/epoch_93.pth",
+  "test_fold": 0
+  }
+  

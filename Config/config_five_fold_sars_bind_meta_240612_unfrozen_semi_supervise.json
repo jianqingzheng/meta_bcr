@@ -1,0 +1,41 @@
+{
+    "train_mode": "sars-bind",
+    "model": "XBCR_ACNN",
+    "batch_sz": 16,
+    "device": "cuda",
+    "num_epochs": 100,
+    "lr": 0.00001,
+    "meta_update_iter": 5,
+    "unsup_loss_weight": 1,
+    "date_step": "0904",
+    "date": "0904-semi",
+    "use_onehot": false,
+    "bert_name": "External/20240603_A1-A11_epoch10",
+    "root_dir": "/fs1/home/caolab/bcr_semi_supervise/",
+    "pretrain_model_dir": "Models/0611-sars-bind",
+    "hiv_split_seed": 3,
+    "prop": [1, 1, 2, 1, 1],
+    "rand_seed": 2023,
+    "freeze_layer_count": 20,
+    "freeze_bert": true,
+    "saveaft": 0,
+    "print_step": 20,
+    "best_val_epoch": 0,
+    "regul_step": 100,
+    "regul_v": [0.02, 0.001],
+    "regul_tgt_dev_rat": 0.08,
+    "benchmark": "acc",
+    "fdir_train_1": "Data/20240611_rbd_flu_hiv_trainmeta_data/20240621-abag_sars_trainmeta_pos_fold{}_randomseed-3.xlsx",
+    "fdir_train_0": "Data/20240611_rbd_flu_hiv_trainmeta_data/20240621-abag_sars_trainmeta_neg_fold{}_randomseed-3.xlsx",
+    "fdir_train_nolabel": "Data/1222_merged_A1-A11_BCR.xlsx",
+    "fdir_train_non_experiment_list": [
+      "Data/240408_nega_all_processed_data_for_train.xlsx",
+      "Data/240314_neg_data_for_sars.xlsx"],
+    "fdir_val_1": "Data/20240611_rbd_flu_hiv_trainmeta_data/20240702-abag_sars_valnega_pos_fold{}_randomseed-3.xlsx",
+    "fdir_val_0": "Data/20240611_rbd_flu_hiv_trainmeta_data/20240702-abag_sars_valnega_neg_fold{}_randomseed-3.xlsx",
+    "fdir_tst_dict": {
+      "TEST_RBD": "Data/20240510_rbd_flu_hiv_test_data/sars_unique_test_randomseed-3.xlsx", 
+      "TEST_BIND_0611": "Data/Benchmark_rbd_bind_0611.xlsx"
+    }
+  }
+  

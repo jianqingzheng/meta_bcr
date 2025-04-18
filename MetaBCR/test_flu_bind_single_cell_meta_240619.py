@@ -15,14 +15,6 @@ _model = 'XBCR_ACNN'  # 'XBCR_ACNN', 'DeepBCR_ACEXN_protbert'
 _device = torch.device('cuda')  # train params
 _batch_sz = 4096
 _use_onehot = False
-# _use_onehot = True
-_lr = 0.00001
-_print_step = 20
-_regul_step = 100
-_regul_v = [0.02, 0.001]
-_regul_tgt_dev_rat = 0.08
-_best_val_epoch = 125
-_rand_seed = 2023
 
 _root_dir = '/fs1/home/caolab/bcr_semi_supervise/'
 

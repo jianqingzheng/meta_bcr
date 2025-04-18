@@ -16,6 +16,15 @@ def get_config(config_path, print_info=True):
         for k, v in config.items(): print(f"    {k}: {v}")
     return SimpleNamespace(**config)
 
+def combine_configs(*configs):
+    """Combine multiple SimpleNamespace configs into one."""
+    combined_dict = {}
+    for config in configs:
+        if not isinstance(config, SimpleNamespace):
+            raise TypeError("All inputs must be SimpleNamespace instances.")
+        combined_dict.update(vars(config))  # later keys overwrite earlier ones
+    return SimpleNamespace(**combined_dict)
+
 if __name__=='__main__':
     config = get_config('Config/config_five_fold_flu_bind_meta_240621_semi_supervise.json')
     # Access parameters

@@ -1,0 +1,40 @@
+{
+    "train_mode": "sars-neu",
+    "model": "XBCR_ACNN",
+    "batch_sz": 16,
+    "device": "cuda",
+    "num_epochs": 30,
+    "lr": 0.00001,
+    "meta_update_iter": 5,
+    "unsup_loss_weight": 1,
+    "date_step": "1030-newdata-unfrozen",
+    "date": "1030-newdata-unfrozen-semi",
+    "use_onehot": false,
+    "bert_name": "External/prot_bert",
+    "root_dir": "/fs1/home/caolab/bcr_semi_supervise/",
+    "pretrain_model_dir": "Models/240530-sars-neu",
+    "hiv_split_seed": 3,
+    "prop": [1, 5, 2, 2, 2],
+    "rand_seed": 2023,
+    "freeze_layer_count": 20,
+    "freeze_bert": true,
+    "saveaft": 0,
+    "print_step": 20,
+    "best_val_epoch": 0,
+    "regul_step": 100,
+    "regul_v": [0.02, 0.001],
+    "regul_tgt_dev_rat": 0.08,
+    "benchmark": "acc",
+    "fdir_train_1": "Data/20241022_rbd_neut_trainmeta_data/20241022-abag_sars-neu-new_trainmeta_pos_fold{}_unique_randomseed-3.xlsx",
+    "fdir_train_0": "Data/20241022_rbd_neut_trainmeta_data/20241022-abag_sars-neu-new_trainmeta_neg_fold{}_unique_randomseed-3.xlsx",
+    "fdir_train_nolabel": "Data/20240909_nc_new_sars_neut_all_bcrs.csv",
+    "fdir_train_non_experiment_list": [
+      "Data/240408_nega_all_processed_data_for_train.xlsx",
+      "Data/240314_neg_data_for_sars.xlsx"],
+    "fdir_val_1": "Data/20241007_rbd_neut_trainmeta_data/20241007-abag_sars-neu-new_valmeta_pos_fold{}_unique_randomseed-3.xlsx",
+    "fdir_val_0": "Data/20241007_rbd_neut_trainmeta_data/20241007-abag_sars-neu-new_valmeta_neg_fold{}_unique_randomseed-3.xlsx",
+    "fdir_tst_dict": {
+      "TEST_NEU_0909": "Data/20241022_nc_new_sars_neut_benchmark.xlsx"
+    }
+  }
+  

@@ -52,8 +52,6 @@ def train(num_fold=None, _cfg_=None):
         data_train_1 = utils.read_table(_cfg_.fdir_train_1.format(fold))
         data_train_0 = utils.read_table(_cfg_.fdir_train_0.format(fold))
 
-        # data_train_non_experiment = utils.read_table(_cfg_.fdir_train_non_experiment_list[0])
-        # data_train_non_experiment_flu = utils.read_table(_cfg_.fdir_train_non_experiment_list[1])
         data_train_non_experiment_list = []
         for fdir_train_non_exp in _cfg_.fdir_train_non_experiment_list:
             data_train_non_experiment_list.append(utils.read_table(fdir_train_non_exp))
@@ -293,25 +291,7 @@ def train(num_fold=None, _cfg_=None):
                         data_tst.to_excel(
                             f"{result_path}{tst_name}_{model_name}_flu_binding_test.xlsx",
                             index=False, header=True)
-                    
-                    # model_name = f'{_cfg_.date}_{epoch}_fold{fold}-maml'
-                    # model.eval()
-                    # predictions_tst, labels_tst, lossweight_tst = utils.implement(model, tst_loader, _cfg_)
-                    # model.train()
-                    # data_tst['output'] = np.around(np.array(predictions_tst)).tolist()
-                    # data_tst['predict'] = predictions_tst
-                    # data_tst.to_excel(
-                    #     f"{_RESULT_DIR}{test_name_BNT}_{model_name}_flu_binding_test.xlsx",
-                    #     index=False, header=True)
 
-                    # model.eval()
-                    # predictions_tst, labels_tst, lossweight_tst = utils.implement(model, test_loader_bind_clone, _cfg_)
-                    # model.train()
-                    # data_test_bind_clone['output'] = np.around(np.array(predictions_tst)).tolist()
-                    # data_test_bind_clone['predict'] = predictions_tst
-                    # data_test_bind_clone.to_excel(
-                    #     f"{_RESULT_DIR}{test_name_clone}_{model_name}_flu_binding_test.xlsx",
-                    #     index=False, header=True)
             if _cfg_.benchmark == 'f1':
                 if (epoch >= _cfg_.saveaft or epoch == 0) and (eval_confusion_val[6] > best_val_f1):
                     _best_val_epoch, best_val_acc, best_val_prec, best_val_f1 = epoch, eval_confusion_val[0], \
@@ -330,16 +310,7 @@ def train(num_fold=None, _cfg_=None):
                         data_tst.to_excel(
                             f"{result_path}{tst_name}_{model_name}_flu_binding_test.xlsx",
                             index=False, header=True)
-                        
-                    # model_name = f'{_cfg_.date}_{epoch}_fold{fold}-maml'
-                    # model.eval()
-                    # predictions_tst, labels_tst, lossweight_tst = utils.implement(model, tst_loader, _cfg_)
-                    # model.train()
-                    # data_tst['output'] = np.around(np.array(predictions_tst)).tolist()
-                    # data_tst['predict'] = predictions_tst
-                    # data_tst.to_excel(
-                    #     f"{_RESULT_DIR}{test_name_BNT}_{model_name}_flu_binding_test.xlsx",
-                    #     index=False, header=True)
+
             else:
                 if (epoch >= _cfg_.saveaft or epoch == 0) and (eval_confusion_val[-1] > best_val_f1):
                     _best_val_epoch, best_val_acc, best_val_prec, best_val_f1 = epoch, eval_confusion_val[0], \
@@ -357,6 +328,16 @@ def train(num_fold=None, _cfg_=None):
               f'f1 {best_val_f1:.2f}, acc {best_val_acc:.2f}, ppv {best_val_prec:.2f}')
 
 if __name__ == '__main__':
-    configure = get_config("Config/config_five_fold_flu_bind_meta_240621_semi_supervise.json")
+    # flu bind
+    # configure = get_config("Config/config_five_fold_flu_bind_meta_240621_semi_supervise.json")
+
+    # flu neutral
+    # configure = get_config("Config/config_five_fold_flu_neu_meta_240903_unfrozen_semi_supervise.json")
+    
+    # sars bind
+    # configure = get_config("Config/config_five_fold_sars_bind_meta_240612_unfrozen_semi_supervise.json")
+
+    # sars neutral
+    configure = get_config("Config/config_five_fold_sars_neu_meta_new_data_241019_unfrozen_semi_supervise.json")
 
     train(num_fold=None, _cfg_=configure)
