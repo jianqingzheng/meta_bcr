@@ -1,16 +1,12 @@
 import os
-import torch.nn as nn
-import torch.nn.init as init
 from torch.utils.data import DataLoader as DataLoader_n
 import pandas as pd
 
 from Config.config import get_config, combine_configs
-from MetaBCR.lm_gnn_model_jz import XBCR_ACNN_woBERT_meta
-from MetaBCR.lm_gnn_model_jz0508_unfrozen import XBCR_ACNN_dense_meta
-from MetaBCR.lm_gnn_model_jz import DeepBCR_ACEXN_protbert
-from MetaBCR.dataset_flu import Ab_Dataset
+from MetaBCR.lm_gnn_model import XBCR_ACNN_woBERT_meta, DeepBCR_ACEXN_protbert, XBCR_ACNN_dense_meta
+from MetaBCR.dataset import Ab_Dataset
 from MetaBCR.losses import *
-import utils
+import MetaBCR.utils as utils
 
 
 def test_single_cell(_cfg_=None):
@@ -26,7 +22,7 @@ def test_single_cell(_cfg_=None):
         print(f'ERROR [ test ] : Wrong model {_cfg_.model}')
         raise ValueError
         
-    result_path = f'Results/{_cfg_.train_mode}/rslt-meta_{_cfg_.model}_{_cfg_.date}_{_cfg_.train_mode}_{_cfg_.prop}_fold{_cfg_.test_fold}_meta{_cfg_.benchmark}-semi/'
+    result_path = f'Results/{_cfg_.train_mode}/rslt-meta_{_cfg_.model}_{_cfg_.mark}_{_cfg_.train_mode}_{_cfg_.prop}_fold{_cfg_.test_fold}_meta{_cfg_.benchmark}-semi/'
     if not os.path.exists(result_path):
         print('INFO [ test ] : Cannot find <RESULT DIR>, created a new one.')
         os.makedirs(result_path)
@@ -37,8 +33,8 @@ def test_single_cell(_cfg_=None):
     model.to(_cfg_.device)
     
     data_test = pd.DataFrame()
-    data_test_abs = utils.read_table(_cfg_.fdir_tst_flu)
-    data_test_ags = utils.read_table(_cfg_.fdir_ags)
+    data_test_abs = utils.read_tables(_cfg_.fdir_tst_flu)
+    data_test_ags = utils.read_tables(_cfg_.fdir_ags)
 
     for i in data_test_ags['variant_name'].values:
         data_test_abs['Antig Name'] = i
@@ -48,7 +44,7 @@ def test_single_cell(_cfg_=None):
 
     test_set = Ab_Dataset(datalist=[data_test], proportions=[None], sample_func=['sample'],
                                 n_samples=data_test.shape[0], is_rand_sample=False, onehot=_cfg_.use_onehot,
-                                rand_shift=False)
+                                rand_shift=False, task=_cfg_.train_mode)
     test_loader = DataLoader_n(dataset=test_set, batch_size=_cfg_.batch_sz, shuffle=False)
     
     print('INFO [ test ] : Testing `{}`'.format(_cfg_.dir_model_to_test))
@@ -63,7 +59,7 @@ def test_single_cell(_cfg_=None):
     print('INFO [ test ] : Results saved to `{}`'.format(f"{result_path}{_cfg_.test_name}_test.csv"))
 
 if __name__ == '__main__':
-    configure_train = get_config("Config/config_five_fold_flu_bind_meta_240621_semi_supervise.json")
+    configure_train = get_config("Config/config_flu_bind_meta_semi_supervise.json")
     configure_test = get_config("Config/config_test_single_cell_flu_bind.json")
     configure = combine_configs(configure_train, configure_test)
 

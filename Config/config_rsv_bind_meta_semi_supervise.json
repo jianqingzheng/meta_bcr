@@ -1,0 +1,45 @@
+{
+    "train_mode": "rsv-bind",
+    "model": "XBCR_ACNN",
+    "batch_sz": 32,
+    "device": "cuda",
+    "num_epochs": 120,
+    "lr": 0.00001,
+    "meta_update_iter": 5,
+    "unsup_loss_weight": 1,
+    "mark": "001",
+    "use_onehot": false,
+    "bert_name": "External/prot_bert",
+    "root_dir": "/home/jachin/data/Github/meta_bcr",
+    "pretrain_model_dir": "Models/0612-flu-bind",
+    "hiv_split_seed": 3,
+    "prop": [1, 1, 1, 1, 0.1],
+    "rand_seed": 2023,
+    "freeze_layer_count": 25,
+    "freeze_bert": true,
+    "saveaft": 5,
+    "print_step": 20,
+    "best_val_epoch": 125,
+    "regul_step": 100,
+    "regul_v": [0.02, 0.001],
+    "regul_tgt_dev_rat": 0.08,
+    "benchmark": "f1",
+    "fdir_train_1": "Data/RSV/0212_RSV_bind_absplit_train_pos_fold{}.csv",
+    "fdir_train_0": "Data/RSV/0212_RSV_bind_absplit_train_neg_fold{}.csv",
+    "fdir_train_nolabel": "Data/1025_all_merged_QIV_bcrs.xlsx",
+    "fdir_train_non_experiment_list": [
+      "Data/RSV/20250215_nega_all_processed_data_for_RSV.xlsx",
+      "Data/240314_neg_data_for_flu.xlsx",
+      "Data/240314_neg_data_for_hiv.xlsx",
+      "Data/240314_neg_data_for_flu.xlsx"
+    ],
+    "fdir_val_1": "Data/RSV/0212_RSV_bind_absplit_pos_fold{}.csv",
+    "fdir_val_0": [
+      "Data/RSV/0212_RSV_bind_absplit_neg_fold{}.csv", 
+      "Data/RSV/0212_RSV_valid_from_sc.csv"
+    ],
+    "fdir_tst_dict": {
+      "TEST": "Data/RSV/0212_RSV_bind_absplit_tst.csv"
+    }
+  }
+  

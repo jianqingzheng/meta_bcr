@@ -1,14 +1,9 @@
-import pandas as pd
-import os
 import numpy as np
 import math
-from torch.nn import Tanh, BatchNorm1d
 from typing import Optional
-# from torch_geometric.nn import GCNConv
 import torch.nn as nn
 import torch
 from transformers import BertModel
-import torchvision
 
 
 class RelativeMultiHeadAttention(torch.nn.Module):
@@ -43,12 +38,6 @@ class RelativeMultiHeadAttention(torch.nn.Module):
         self.num_heads = num_heads
         self.sqrt_dim = math.sqrt(d_model)
 
-        # proj_layer=getattr(torch.nn,'Linear')
-        # self.query_proj = proj_layer(d_model, d_model)
-        # self.key_proj = proj_layer(d_model, d_model)
-        # self.value_proj = proj_layer(d_model, d_model)
-        # self.pos_proj = proj_layer(d_model, d_model, bias=False)
-        # self.out_proj = proj_layer(d_model, d_model)
         proj_layer = getattr(torch.nn, 'Conv%dd' % ndims)
         self.query_proj = proj_layer(d_model, d_model, 1)
         self.key_proj = proj_layer(d_model, d_model, 1)
@@ -221,113 +210,6 @@ class Atrous_block_leaky(torch.nn.Module):
         return self.act(y + x)
 
 
-class CrossMultiHeadAttention(torch.nn.Module):
-    """
-    Multi-head attention with relative positional encoding.
-    This concept was proposed in the "Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context"
-    Args:
-        d_model (int): The dimension of model
-        num_heads (int): The number of attention heads.
-        dropout_p (float): probability of dropout
-    Inputs: query, key, value, pos_embedding, mask
-        - **query** (batch, feat, seq): Tensor containing query vector
-        - **key** (batch, feat, seq): Tensor containing key vector
-        - **value** (batch, feat, seq): Tensor containing value vector
-        - **pos_embedding** (batch, feat, seq): Positional embedding tensor
-        - **mask** (batch, 1, seq2) or (batch, seq1, seq2): Tensor containing indices to be masked
-    Returns:
-        - **outputs**: Tensor produces by relative multi head attention module.
-    """
-
-    def __init__(
-            self,
-            d_model: int = 1024,
-            num_heads: int = 16,
-            dropout_p: float = 0.,
-            ndims: int = 1,
-    ):
-        super(CrossMultiHeadAttention, self).__init__()
-        assert d_model % num_heads == 0, "d_model % num_heads should be zero."
-        self.d_model = d_model
-        self.d_head = int(d_model / num_heads)
-        self.num_heads = num_heads
-        self.sqrt_dim = math.sqrt(d_model)
-
-        # proj_layer=getattr(torch.nn,'Linear')
-        # self.query_proj = proj_layer(d_model, d_model)
-        # self.key_proj = proj_layer(d_model, d_model)
-        # self.value_proj = proj_layer(d_model, d_model)
-        # self.pos_proj = proj_layer(d_model, d_model, bias=False)
-        # self.out_proj = proj_layer(d_model, d_model)
-        proj_layer = getattr(torch.nn, 'Conv%dd' % ndims)
-        self.query_proj = proj_layer(d_model, d_model, 1)
-        self.key_proj = proj_layer(d_model, d_model, 1)
-        self.value_proj = proj_layer(d_model, d_model, 1)
-        self.pos_proj = proj_layer(d_model, d_model, 1, bias=False)
-        self.out_proj = proj_layer(d_model, d_model, 1)
-
-        self.dropout = torch.nn.Dropout(p=dropout_p)
-        self.u_bias = torch.nn.Parameter(torch.Tensor(self.num_heads, self.d_head, 1))
-        self.v_bias = torch.nn.Parameter(torch.Tensor(self.num_heads, self.d_head, 1))
-        torch.nn.init.xavier_uniform_(self.u_bias)
-        torch.nn.init.xavier_uniform_(self.v_bias)
-        self.Softmax_layer = torch.nn.Softmax(dim=-1)
-        self.make_attn_einsum_eq = 'b h k i, b h k j -> b h i j'
-        self.cal_attn_einsum_eq = 'b h i j, b h k j -> b h k i'
-
-    def forward(
-            self,
-            query: torch.Tensor,
-            key: torch.Tensor,
-            value: torch.Tensor,
-            pos_embedding: torch.Tensor,
-            mask: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
-        batch_size = value.size(0)
-
-        # query = self.query_proj(query).view(batch_size, -1, self.num_heads, self.d_head)
-        query = self.query_proj(query).view(batch_size, self.num_heads, self.d_head, -1)
-        # key = self.key_proj(key).view(batch_size, -1, self.num_heads, self.d_head).permute(0, 2, 1, 3)
-        key = self.key_proj(key).view(batch_size, self.num_heads, self.d_head, -1)  # .permute(0, 2, 1, 3)
-        # value = self.value_proj(value).view(batch_size, -1, self.num_heads, self.d_head).permute(0, 2, 1, 3)
-        value = self.value_proj(value).view(batch_size, self.num_heads, self.d_head, -1)  # .permute(0, 2, 1, 3)
-        # pos_embedding = self.pos_proj(pos_embedding).view(batch_size, -1, self.num_heads, self.d_head)
-        pos_embedding = self.pos_proj(pos_embedding).view(batch_size, self.num_heads, self.d_head, -1)
-
-        # content_score = torch.matmul((query + self.u_bias).transpose(1, 2), key.transpose(2, 3))
-        content_score = torch.einsum(self.make_attn_einsum_eq, (query + self.u_bias), key)
-        # pos_score = torch.matmul((query + self.v_bias).transpose(1, 2), pos_embedding.permute(0, 2, 3, 1))
-        pos_score = torch.einsum(self.make_attn_einsum_eq, (query + self.v_bias), pos_embedding)
-        pos_score = self._compute_relative_positional_encoding(pos_score)
-
-        score = (content_score + pos_score) / self.sqrt_dim
-        # print(score.shape)
-        if mask is not None:
-            mask = mask.unsqueeze(1)
-            score.masked_fill_(mask, -1e9)
-        # print(score)
-        # attn = F.softmax(score, -1)
-        attn = self.Softmax_layer(score)
-        attn = self.dropout(attn)
-
-        # context = torch.matmul(attn, value).transpose(1, 2)
-        context = torch.einsum(self.cal_attn_einsum_eq, attn, value)
-        # context = context.contiguous().view(batch_size, -1, self.d_model)
-        context = context.contiguous().view(batch_size, self.d_model, -1)
-
-        return self.out_proj(context)
-
-    def _compute_relative_positional_encoding(self, pos_score: torch.Tensor) -> torch.Tensor:
-        batch_size, num_heads, seq_length1, seq_length2 = pos_score.size()
-        zeros = pos_score.new_zeros(batch_size, num_heads, seq_length1, 1)
-        padded_pos_score = torch.cat([zeros, pos_score], dim=-1)
-
-        padded_pos_score = padded_pos_score.view(batch_size, num_heads, seq_length2 + 1, seq_length1)
-        pos_score = padded_pos_score[:, :, 1:].view_as(pos_score)
-
-        return pos_score
-
-
 class EvolutMultiHeadAttention(torch.nn.Module):
     """
     Multi-head attention with relative positional encoding.
@@ -382,12 +264,11 @@ class EvolutMultiHeadAttention(torch.nn.Module):
         self.make_attn_einsum_eq = 'b h k i, b h k j -> b h i j'
         self.cal_attn_einsum_eq = 'b h i j, b h k j -> b h k i'
         self.evolut_fusion = torch.nn.Sequential(
-            torch.nn.Conv2d(self.num_heads * 2, self.num_heads * 4, kernel_size=3, padding=1, stride=1),
-            torch.nn.LeakyReLU(negative_slope=1e-1, inplace=True),
-            torch.nn.Conv2d(self.num_heads * 4, self.num_heads, kernel_size=3, padding=1, stride=1))
+            torch.nn.Conv2d(self.num_heads*2,self.num_heads*4,kernel_size=3,padding=1,stride=1),
+            torch.nn.LeakyReLU(negative_slope=1e-1,inplace=True),
+            torch.nn.Conv2d(self.num_heads*4,self.num_heads,kernel_size=3,padding=1,stride=1))
 
-        self.evolut_fusion = torch.nn.Conv2d(self.num_heads * 2, self.num_heads, kernel_size=3, padding=1, stride=1)
-
+        self.evolut_fusion = torch.nn.Conv2d(self.num_heads*2,self.num_heads,kernel_size=3,padding=1,stride=1)
     def forward(
             self,
             query: torch.Tensor,
@@ -396,28 +277,18 @@ class EvolutMultiHeadAttention(torch.nn.Module):
             pos_embedding: torch.Tensor,
             mask: Optional[torch.Tensor] = None,
             edge_weights: Optional[torch.Tensor] = None,
-    ) -> (torch.Tensor, torch.Tensor):
+    ) -> (torch.Tensor,torch.Tensor):
         batch_size = value.size(0)
 
-        # query = self.query_proj(query).view(batch_size, -1, self.num_heads, self.d_head)
         query = self.query_proj(query).view(batch_size, self.num_heads, self.d_head, -1)
-        # key = self.key_proj(key).view(batch_size, -1, self.num_heads, self.d_head).permute(0, 2, 1, 3)
         key = self.key_proj(key).view(batch_size, self.num_heads, self.d_head, -1)  # .permute(0, 2, 1, 3)
-        # value = self.value_proj(value).view(batch_size, -1, self.num_heads, self.d_head).permute(0, 2, 1, 3)
         value = self.value_proj(value).view(batch_size, self.num_heads, self.d_head, -1)  # .permute(0, 2, 1, 3)
-        # pos_embedding = self.pos_proj(pos_embedding).view(batch_size, -1, self.num_heads, self.d_head)
-        # pos_embedding = self.pos_proj(pos_embedding).view(batch_size, self.num_heads, self.d_head, -1)
-
-        # content_score = torch.matmul((query + self.u_bias).transpose(1, 2), key.transpose(2, 3))
         content_score = torch.einsum(self.make_attn_einsum_eq, (query + self.u_bias), key)
-        # pos_score = torch.matmul((query + self.v_bias).transpose(1, 2), pos_embedding.permute(0, 2, 3, 1))
-        # pos_score = torch.einsum(self.make_attn_einsum_eq, (query + self.v_bias), pos_embedding)
-        # pos_score = self._compute_relative_positional_encoding(pos_score)
 
         # score = (content_score + pos_score) / self.sqrt_dim
         score = (content_score) / self.sqrt_dim
         if edge_weights is not None:
-            score = self.evolut_fusion(torch.cat([score, edge_weights], 1))
+            score = self.evolut_fusion(torch.cat([score,edge_weights],1))
         # print(score.shape)
         if mask is not None:
             mask = mask.unsqueeze(1)
@@ -447,68 +318,263 @@ class EvolutMultiHeadAttention(torch.nn.Module):
 
 
 class Adaptive_Regulariz():
-    def __init__(self, dropout_range=[0., 0.9], weight_range=[0., 10.], velocity=[0.02, 0.001],
-                 target_deviation_ratio=0.3):
-        self.dropout = 0.5
+    def __init__(self, dropout_range=[0.,0.9],weight_range=[0.,10.],velocity=[0.02,0.001],target_deviation_ratio=0.3):
+        self.dropout=0.5
         # self.weight=0.1
         self.weight = 0.0
-        self.dropout_range = dropout_range
-        self.weight_range = weight_range
-        self.dropout_velocity = velocity[0]
+        self.dropout_range=dropout_range
+        self.weight_range=weight_range
+        self.dropout_velocity=velocity[0]
         self.weight_velocity = velocity[1]
-        self.thresh = target_deviation_ratio
+        self.thresh=target_deviation_ratio
         return
 
-    def _update_scale(self, loss_src, loss_tgt, eps=10e-8):
-        return (loss_tgt - loss_src) / (abs(loss_tgt) + eps) - self.thresh
+    def _update_scale(self,loss_src,loss_tgt, eps=10e-8):
+        return (loss_tgt-loss_src)/(abs(loss_tgt) + eps) -self.thresh
         # return np.maximum((loss_tgt-loss_src)/abs(loss_tgt)-self.thresh,0)
         # return (abs(loss_tgt)-abs(loss_src))/abs(loss_tgt)-self.thresh
 
-    def update_dropout(self, loss_src, loss_tgt):
-        scale = self._update_scale(loss_src, loss_tgt)
-        self.dropout += self.dropout_velocity * scale
+    def update_dropout(self,loss_src,loss_tgt):
+        scale=self._update_scale(loss_src,loss_tgt)
+        self.dropout+=self.dropout_velocity*scale
         return np.clip(self.dropout, self.dropout_range[0], self.dropout_range[1]).item()
 
-    def update_weight(self, loss_src, loss_tgt):
-        scale = self._update_scale(loss_src, loss_tgt)
-        self.weight += self.weight_velocity * scale
-        # return np.clip(self.weight, self.weight_range[0], self.weight_range[1]).item()
-        self.weight=np.clip(self.weight, self.weight_range[0], self.weight_range[1]).item()
-        return self.weight
+    def update_weight(self,loss_src,loss_tgt):
+        scale=self._update_scale(loss_src,loss_tgt)
+        self.weight+=self.weight_velocity*scale
+        return np.clip(self.weight, self.weight_range[0], self.weight_range[1]).item()
 
-class RESNET(torch.nn.Module):
-    def __init__(self):
-        super(RESNET, self).__init__()
-        self.model = torchvision.models.resnet50()
-        # self.model.load_state_dict(torch.load('./model/resnet50-19c8e357.pth'))
-        self.model.avgpool = torch.nn.AdaptiveAvgPool2d((1, 1))
-        self.fc1 = torch.nn.Linear(2048, 512)
-        self.fc2 = torch.nn.Linear(512, 1)
+
+class DeepBCR_ACEXN_protbert(torch.nn.Module):
+
+    def __init__(self, node_attr_dim=1024, hidden_dim=128, h1_dim=64, h2_dim=16, share_weight=False, dropout=0.,
+                 heads=4, block_num=2, ab_freeze_layer_count=None, freeze_bert=False, output_attn_score=False,extra_dense=True,
+                 extra_regressor=False,extra_classifier=False, print_feature=False):
+        super(DeepBCR_ACEXN_protbert, self).__init__()
+
+        heads = 64
+        expand_num = 8
+        h1_dim = 512
+
+        self.output_attn_score=output_attn_score
+        self.extra_dense=extra_dense
+        self.extra_regressor=extra_regressor
+        self.extra_classifier=extra_classifier
+        self.ab_bert = BertModel.from_pretrained("prot_bert")
+        # freeze the ? layers
+        if ab_freeze_layer_count is not None:
+            _freeze_bert(self.ab_bert, freeze_bert=freeze_bert, freeze_layer_count=ab_freeze_layer_count)
+
+        self.node_attr_dim = node_attr_dim
+        # self.edge_attr_dim = edge_attr_dim
+        self.hidden_dim = hidden_dim
+        self.h1_dim = h1_dim  # dim after the first gnn
+        self.h2_dim = h2_dim  # dim after the bipartite
+        self.share_weight = share_weight
+        self.n_dropout = dropout
+        self.heads = heads
+        self.block_num = block_num
+        self.relu = torch.nn.LeakyReLU()
+        # self.gmp = torch.nn.MaxPool1d()
+        self.dropout = torch.nn.Dropout(dropout)
+        # self.ag_gnn1 = Atrous_block(self.node_attr_dim, self.hidden_dim)
+        self.ag_gnn1 = Atrous_block(20, self.hidden_dim)
+        atrous_blocks = [Atrous_block(self.hidden_dim, self.hidden_dim) for _ in range(block_num)]
+        self.ag_gnn2 = torch.nn.Sequential(*atrous_blocks)
+        atrous_blocks = [Atrous_block(self.hidden_dim, self.hidden_dim) for _ in range(block_num)]
+        self.ag_gnn3 = torch.nn.Sequential(*atrous_blocks)
         self.sigmoid = torch.nn.Sigmoid()
 
-    def forward(self, ag_x, ab_x, ab_l):
-        ag_x = ag_x.view(ag_x.size()[0], 1, ag_x.size()[1], ag_x.size()[2])
-        ab_x = ab_x.view(ab_x.size()[0], 1, ab_x.size()[1], ab_x.size()[2])
-        ab_l = ab_l.view(ab_l.size()[0], 1, ab_l.size()[1], ab_l.size()[2])
-        x = torch.cat([ag_x, ab_x, ab_l], dim=1)
+        self.cross_attn_layer_abh2l1 = EvolutMultiHeadAttention(d_model=self.hidden_dim, num_heads=self.heads, dropout_p=0.)
+        self.cross_attn_layer_abl2h1 = EvolutMultiHeadAttention(d_model=self.hidden_dim, num_heads=self.heads, dropout_p=0.)
+        self.cross_attn_layer_ag2ab1 = EvolutMultiHeadAttention(d_model=self.hidden_dim, num_heads=self.heads, dropout_p=0.)
+        self.cross_attn_layer_ab2ag1 = EvolutMultiHeadAttention(d_model=self.hidden_dim, num_heads=self.heads, dropout_p=0.)
+        self.cross_attn_layer_abh2l2 = EvolutMultiHeadAttention(d_model=self.hidden_dim, num_heads=self.heads, dropout_p=0.)
+        self.cross_attn_layer_abl2h2 = EvolutMultiHeadAttention(d_model=self.hidden_dim, num_heads=self.heads, dropout_p=0.)
+        self.cross_attn_layer_ag2ab2 = EvolutMultiHeadAttention(d_model=self.hidden_dim, num_heads=self.heads, dropout_p=0.)
+        self.cross_attn_layer_ab2ag2 = EvolutMultiHeadAttention(d_model=self.hidden_dim, num_heads=self.heads, dropout_p=0.)
 
-        x = self.model.conv1(x)
-        x = self.model.bn1(x)
-        x = self.model.relu(x)
-        x = self.model.maxpool(x)
-        x = self.model.layer1(x)
-        x = self.model.layer2(x)
-        x = self.model.layer3(x)
-        x = self.model.layer4(x)
-        x = self.model.avgpool(x)
+        if self.share_weight:
+            self.ab_gnn1 = self.ag_gnn1
+            self.ab_gnn2 = self.ag_gnn2
+            self.ab_gnn3 = self.ag_gnn3
+        else:
+            self.ab_gnn1 = Atrous_block(self.node_attr_dim, self.hidden_dim)
+            atrous_blocks = [Atrous_block(self.hidden_dim, self.hidden_dim) for _ in range(block_num)]
+            self.ab_gnn2 = torch.nn.Sequential(*atrous_blocks)
+            atrous_blocks = [Atrous_block(self.hidden_dim, self.hidden_dim) for _ in range(block_num)]
+            self.ab_gnn3 = torch.nn.Sequential(*atrous_blocks)
 
-        x = x.view(x.size(0), x.size(1) * x.size(2) * x.size(3))
-        x = self.fc1(x)
-        x = self.model.relu(x)
-        x = self.fc2(x)
-        x = self.sigmoid(x)
 
-        return [x]
+        self.expand = Atrous_block(self.hidden_dim, expand_num*self.hidden_dim)
+
+        self.dense_concat = torch.nn.Linear(3 * expand_num* self.hidden_dim, self.h1_dim)
+        self.res_dense_block = torch.nn.Sequential(
+            self.relu,
+            torch.nn.Linear(self.h1_dim, self.h1_dim),
+            self.relu,
+            torch.nn.Linear(self.h1_dim, self.h1_dim),
+            self.relu,
+            torch.nn.Dropout(dropout),
+            torch.nn.Linear(self.h1_dim, self.h1_dim))
+        if self.extra_dense:
+            self.res_dense_block1 = torch.nn.Sequential(
+                self.relu,
+                torch.nn.Linear(self.h1_dim, self.h1_dim),
+                self.relu,
+                torch.nn.Linear(self.h1_dim, self.h1_dim),
+                self.relu,
+                # torch.nn.Dropout(dropout),
+                torch.nn.Linear(self.h1_dim, self.h1_dim))
+            self.res_dense_block2 = torch.nn.Sequential(
+                self.relu,
+                torch.nn.Linear(self.h1_dim, self.h1_dim),
+                self.relu,
+                torch.nn.Linear(self.h1_dim, self.h1_dim),
+                self.relu,
+                # torch.nn.Dropout(dropout),
+                torch.nn.Linear(self.h1_dim, self.h1_dim))
+        self.classifier = torch.nn.Sequential(
+            self.relu,
+            torch.nn.Linear(self.h1_dim, 1))
+        if self.extra_classifier:
+            self.dense_concat_ab = torch.nn.Linear(2 * expand_num* self.hidden_dim, self.h1_dim)
+            self.res_dense_block3 = torch.nn.Sequential(
+                self.relu,
+                torch.nn.Linear(self.h1_dim, self.h1_dim),
+                self.relu,
+                torch.nn.Linear(self.h1_dim, self.h1_dim),
+                self.relu,
+                # torch.nn.Dropout(dropout),
+                torch.nn.Linear(self.h1_dim, self.h1_dim))
+            self.res_dense_block4 = torch.nn.Sequential(
+                self.relu,
+                torch.nn.Linear(self.h1_dim, self.h1_dim),
+                self.relu,
+                torch.nn.Linear(self.h1_dim, self.h1_dim),
+                self.relu,
+                # torch.nn.Dropout(dropout),
+                torch.nn.Linear(self.h1_dim, self.h1_dim))
+            self.classifier_ar = torch.nn.Sequential(
+                self.relu,
+                torch.nn.Linear(self.h1_dim, 1))
+        if self.extra_regressor:
+            self.regressor = torch.nn.Sequential(
+                self.relu,
+                torch.nn.Linear(self.h1_dim, 1))
+        self.print_feature = print_feature
+
+    def get_variables(self,lp=1):
+        self.device=next(self.dense_concat.parameters()).device
+        total_regul=torch.tensor(0,dtype=torch.float,device=self.device)
+        total_param_num = 1
+        for param in self.parameters():
+            total_regul += torch.norm(param, lp) ** 1
+            total_param_num += param.numel()
+        cls_x_regul,cls_y_regul=torch.tensor(0,dtype=torch.float,device=self.device),torch.tensor(0,dtype=torch.float,device=self.device)
+        cls_x_param_num, cls_y_param_num = 1, 1
+        if self.extra_dense:
+            cls_x=[
+                self.dense_concat,
+                self.res_dense_block1,
+                self.res_dense_block2,
+                # self.classifier,
+            ]
+            for model in cls_x:
+                # print(model)
+                for param in model.parameters():
+                    cls_x_regul += torch.norm(param, lp) ** 1
+                    cls_x_param_num += param.numel()
+
+        if self.extra_classifier:
+            cls_y=[
+                self.dense_concat_ab,
+                self.res_dense_block3,
+                self.res_dense_block4,
+                # self.classifier_ar,
+            ]
+            for model in cls_y:
+                for param in model.parameters():
+                    cls_y_regul += torch.norm(param, lp) ** 2
+                    cls_y_param_num += param.numel()
+        # return [0.01*cls_x_regul/cls_x_param_num,0.01*cls_y_regul/cls_y_param_num]
+        return [0.01 * total_regul / total_param_num,0.01*cls_x_regul/cls_x_param_num]
+
+    def forward(self, ag_x, ag_edge_index=None, ag_x_batch=None, ab_x=None, attention_mask_ab_v=None, ab_l=None,
+                attention_mask_ab_l=None, ab_edge_index=None, ab_x_batch=None,attn_score=None):
+        # [ag2ab_s,abl2abh_s,abh2abl_s,ab2ag_s]=attn_score
+        ab_x = self.ab_bert(input_ids=ab_x, attention_mask=attention_mask_ab_v).last_hidden_state
+        ab_l = self.ab_bert(input_ids=ab_l, attention_mask=attention_mask_ab_l).last_hidden_state
+        # antigen acnn
+        # print(ag_x)
+        # print(ag_edge_index)
+        ag_x = torch.permute(ag_x, [0, 2, 1])
+        ab_x = torch.permute(ab_x, [0, 2, 1])
+        ab_l = torch.permute(ab_l, [0, 2, 1])
+
+        # antibody acnn x cross attention
+        ab_h1 = self.ab_gnn1(ab_x)
+        ab_l1 = self.ab_gnn1(ab_l)
+        ag_h1 = self.ag_gnn1(ag_x)
+
+        ag2ab_x,ag2ab_s = self.cross_attn_layer_ag2ab1(query=ab_h1, key=ag_h1, value=ag_h1, pos_embedding=ag_h1)
+        abl2abh_x,abl2abh_s = self.cross_attn_layer_abl2h1(query=ab_h1, key=ab_l1, value=ab_l1,pos_embedding=ab_l1)
+        ab_h2 = ab_h1 + ag2ab_x + abl2abh_x
+        abh2abl_x,abh2abl_s = self.cross_attn_layer_abh2l1(query=ab_l1, key=ab_h1, value=ab_h1, pos_embedding=ab_h1)
+        ab_l2 = ab_l1 + abh2abl_x
+        ab2ag_x, ab2ag_s = self.cross_attn_layer_ab2ag1(query=ag_h1, key=ab_h1, value=ab_h1, pos_embedding=ab_h1)
+        ag_h2 = ag_h1 + ab2ag_x
+
+        ab_h2 = self.ab_gnn2(ab_h2)
+        ab_l2 = self.ab_gnn2(ab_l2)
+        ag_h2 = self.ag_gnn2(ag_h2)
+
+        ag2ab_x, ag2ab_s = self.cross_attn_layer_ag2ab2(query=ab_h2, key=ag_h2, value=ag_h2, pos_embedding=ag_h2, edge_weights=ag2ab_s)
+        abl2abh_x, abl2abh_s = self.cross_attn_layer_abl2h2(query=ab_h2, key=ab_l2, value=ab_l2, pos_embedding=ab_l2, edge_weights=abl2abh_s)
+        ab_h3 = ab_h2 + ag2ab_x + abl2abh_x
+        abh2abl_x, abh2abl_s = self.cross_attn_layer_abh2l2(query=ab_l2, key=ab_h2, value=ab_h2, pos_embedding=ab_h2, edge_weights=abh2abl_s)
+        ab_l3 = ab_l2 + abh2abl_x
+        ab2ag_x, ab2ag_s = self.cross_attn_layer_ab2ag2(query=ag_h2, key=ab_h2, value=ab_h2, pos_embedding=ab_h2, edge_weights=ab2ag_s)
+        ag_h3 = ag_h2 + ab2ag_x
+
+        ab_h3 = self.ab_gnn3(ab_h3)
+        ab_l3 = self.ab_gnn3(ab_l3)
+        ag_h3 = self.ag_gnn3(ag_h3)
+
+        ab_h3 = self.expand(ab_h3)
+        ab_l3 = self.expand(ab_l3)
+        ag_h3 = self.expand(ag_h3)
+        # predict bind or not
+        x1 = torch.nn.functional.max_pool1d(ag_h3, kernel_size=ag_h3.size()[2:])[..., 0]
+        x2 = torch.nn.functional.max_pool1d(ab_h3, kernel_size=ab_h3.size()[2:])[..., 0]
+        x3 = torch.nn.functional.max_pool1d(ab_l3, kernel_size=ab_l3.size()[2:])[..., 0]
+
+        out = []
+        x = self.dense_concat(torch.cat([x1, x2, x3], 1))
+        # x=x + self.res_dense_block(x)
+        if self.extra_dense:
+            x = x + self.res_dense_block1(x)
+            x = x + self.res_dense_block2(x)
+        x0 = self.classifier(x)
+        x0 = self.sigmoid(x0)
+        out=out+[x0]
+        if self.extra_regressor:
+            # x1 = x + self.res_dense_block3(x)
+            x1 = self.regressor(x)
+            out=out+[x1]
+        if self.extra_classifier:
+            y = self.dense_concat_ab(torch.cat([x2, x3], 1))
+            y = y + self.res_dense_block3(y)
+            y = y + self.res_dense_block4(y)
+            y = self.classifier_ar(y)
+            y = self.sigmoid(y)
+            out.append(y)
+        if self.output_attn_score:
+            attn=[torch.sum(ag2ab_s, dim=1) * torch.sum(torch.permute(ab2ag_s, (0, 1, 3, 2)), dim=1),torch.sum(torch.permute(abh2abl_s, (0, 1, 3, 2)), dim=1) * torch.sum(abl2abh_s, dim=1)]
+            out.append(attn)
+        if self.print_feature:
+            out.append(x)
+        return out
 
 
 class ReptileModel(nn.Module):
@@ -538,7 +604,6 @@ class OmniglotModel(ReptileModel):
     """
     A model for Omniglot classification.
     """
-
     def __init__(self, num_classes):
         ReptileModel.__init__(self)
 
@@ -591,6 +656,202 @@ class OmniglotModel(ReptileModel):
         if self.is_cuda():
             clone.cuda()
         return clone
+
+
+class XBCR_ACNN_meta(ReptileModel):
+
+    def __init__(self, node_attr_dim=1024, hidden_dim=128, h1_dim=64, h2_dim=16, share_weight=False, dropout=0.,
+                 heads=4, block_num=3, freeze_bert=False, ab_freeze_layer_count=None, extra_dense=False):
+        super(ReptileModel, self).__init__()
+
+        self.freeze_bert=freeze_bert
+        self.ab_freeze_layer_count=ab_freeze_layer_count
+
+        self.node_attr_dim = node_attr_dim
+        # self.edge_attr_dim = edge_attr_dim
+        self.hidden_dim = hidden_dim
+        self.h1_dim = h1_dim  # dim after the first gnn
+        self.h2_dim = h2_dim  # dim after the bipartite
+        self.share_weight = share_weight
+        self.n_dropout = dropout
+        self.heads = heads
+        self.block_num = block_num
+        self.relu = torch.nn.LeakyReLU()
+        # self.gmp = torch.nn.MaxPool1d()
+        self.dropout = torch.nn.Dropout(dropout)
+        # self.ag_gnn1 = Atrous_block(self.node_attr_dim, self.hidden_dim)
+        self.ag_gnn1 = Atrous_block(20, self.hidden_dim)
+        atrous_blocks = [Atrous_block(self.hidden_dim, self.hidden_dim) for _ in range(block_num)]
+        self.ag_gnn2 = torch.nn.Sequential(*atrous_blocks)
+        self.sigmoid = torch.nn.Sigmoid()
+        if self.share_weight:
+            self.ab_gnn1 = self.ag_gnn1
+            self.ab_gnn2 = self.ag_gnn2
+        else:
+            self.ab_gnn1 = Atrous_block(self.node_attr_dim, self.hidden_dim)
+            atrous_blocks = [Atrous_block(self.hidden_dim, self.hidden_dim) for _ in range(block_num)]
+            self.ab_gnn2 = torch.nn.Sequential(*atrous_blocks)
+
+        self.dense_concat = torch.nn.Linear(3 * self.hidden_dim, self.h1_dim)
+        self.res_dense_block = torch.nn.Sequential(
+            self.relu,
+            torch.nn.Linear(self.h1_dim, self.h1_dim),
+            self.relu,
+            torch.nn.Linear(self.h1_dim, self.h1_dim),
+            self.relu,
+            torch.nn.Dropout(dropout),
+            torch.nn.Linear(self.h1_dim, self.h1_dim))
+        self.classifier = torch.nn.Sequential(
+            self.relu,
+            torch.nn.Linear(self.h1_dim, 1))
+
+    def clone_meta(self):
+        clone = XBCR_ACNN_meta(node_attr_dim=self.node_attr_dim, hidden_dim=self.hidden_dim, h1_dim=self.h1_dim, h2_dim=self.h2_dim, share_weight=self.share_weight, dropout=self.n_dropout,
+                 heads=self.heads, block_num=self.block_num, freeze_bert=self.freeze_bert, ab_freeze_layer_count=self.ab_freeze_layer_count)
+        clone.load_state_dict(self.state_dict())
+        if self.is_cuda():
+            clone.cuda()
+        return clone
+
+    def get_variables(self,lp=1):
+        self.device=next(self.dense_concat.parameters()).device
+        total_regul=torch.tensor(0,dtype=torch.float,device=self.device)
+        total_param_num = 1
+        for param in self.parameters():
+            total_regul += torch.norm(param, lp) ** 1
+            total_param_num += param.numel()
+        cls_x_regul,cls_y_regul=torch.tensor(0,dtype=torch.float,device=self.device),torch.tensor(0,dtype=torch.float,device=self.device)
+        cls_x_param_num, cls_y_param_num = 1, 1
+
+        return [0.01 * total_regul / total_param_num,0.01*cls_x_regul/cls_x_param_num]
+
+    def forward(self, ag_x, ag_edge_index=None, ag_x_batch=None, ab_x=None, attention_mask_ab_v=None, ab_l=None,
+                attention_mask_ab_l=None, ab_edge_index=None, ab_x_batch=None,ab_bert=None):
+
+        # if ab_bert is not None:
+        if True:
+            ab_x = ab_bert(input_ids=ab_x, attention_mask=attention_mask_ab_v).last_hidden_state
+            ab_l = ab_bert(input_ids=ab_l, attention_mask=attention_mask_ab_l).last_hidden_state
+        # antigen acnn
+        ag_x = torch.permute(ag_x, [0, 2, 1])
+        ab_x = torch.permute(ab_x, [0, 2, 1])
+        ab_l = torch.permute(ab_l, [0, 2, 1])
+
+        ag_h1 = self.ag_gnn1(ag_x)
+        ag_h1 = self.ag_gnn2(ag_h1)
+
+        # antibody acnn
+        ab_h1 = self.ab_gnn1(ab_x)
+        ab_h1 = self.ab_gnn2(ab_h1)
+
+        ab_l1 = self.ab_gnn1(ab_l)
+        ab_l1 = self.ab_gnn2(ab_l1)
+
+        # predict bind or not
+        x1 = torch.nn.functional.max_pool1d(ag_h1, kernel_size=ag_h1.size()[2:])[..., 0]
+        x2 = torch.nn.functional.max_pool1d(ab_h1, kernel_size=ab_h1.size()[2:])[..., 0]
+        x3 = torch.nn.functional.max_pool1d(ab_l1, kernel_size=ab_l1.size()[2:])[..., 0]
+        x = torch.cat([x1, x2, x3], 1)  # batch_size * 124
+        x = self.dense_concat(x)
+        x = self.classifier(x + self.res_dense_block(x))
+        x = self.sigmoid(x)
+        x = torch.clamp(x, min=0.001, max=0.999)
+        return [x]
+
+
+class XBCR_ACNN_woBERT_meta(ReptileModel):
+
+    def __init__(self, node_attr_dim=20, hidden_dim=128, h1_dim=64, h2_dim=16, share_weight=False, dropout=0.,
+                 heads=4, block_num=3, freeze_bert=False, ab_freeze_layer_count=None, extra_dense=False):
+        super(XBCR_ACNN_woBERT_meta, self).__init__()
+        self.freeze_bert=freeze_bert
+        self.ab_freeze_layer_count=ab_freeze_layer_count
+
+        self.node_attr_dim = node_attr_dim
+        # self.edge_attr_dim = edge_attr_dim
+        self.hidden_dim = hidden_dim
+        self.h1_dim = h1_dim  # dim after the first gnn
+        self.h2_dim = h2_dim  # dim after the bipartite
+        self.share_weight = share_weight
+        self.n_dropout = dropout
+        self.heads = heads
+        self.block_num = block_num
+        self.relu = torch.nn.LeakyReLU()
+        # self.gmp = torch.nn.MaxPool1d()
+        self.dropout = torch.nn.Dropout(dropout)
+        # self.ag_gnn1 = Atrous_block(self.node_attr_dim, self.hidden_dim)
+        self.ag_gnn1 = Atrous_block(20, self.hidden_dim)
+        atrous_blocks = [Atrous_block(self.hidden_dim, self.hidden_dim) for _ in range(block_num)]
+        self.ag_gnn2 = torch.nn.Sequential(*atrous_blocks)
+        self.sigmoid = torch.nn.Sigmoid()
+        if self.share_weight:
+            self.ab_gnn1 = self.ag_gnn1
+            self.ab_gnn2 = self.ag_gnn2
+        else:
+            self.ab_gnn1 = Atrous_block(self.node_attr_dim, self.hidden_dim)
+            atrous_blocks = [Atrous_block(self.hidden_dim, self.hidden_dim) for _ in range(block_num)]
+            self.ab_gnn2 = torch.nn.Sequential(*atrous_blocks)
+
+        self.dense_concat = torch.nn.Linear(3 * self.hidden_dim, self.h1_dim)
+        self.res_dense_block = torch.nn.Sequential(
+            self.relu,
+            torch.nn.Linear(self.h1_dim, self.h1_dim),
+            self.relu,
+            torch.nn.Linear(self.h1_dim, self.h1_dim),
+            self.relu,
+            # torch.nn.Dropout(dropout),
+            torch.nn.Linear(self.h1_dim, self.h1_dim))
+        self.classifier = torch.nn.Sequential(
+            self.relu,
+            torch.nn.Linear(self.h1_dim, 1))
+
+    def clone_meta(self):
+        clone = XBCR_ACNN_woBERT_meta(node_attr_dim=self.node_attr_dim, hidden_dim=self.hidden_dim, h1_dim=self.h1_dim, h2_dim=self.h2_dim, share_weight=self.share_weight, dropout=self.n_dropout,
+                 heads=self.heads, block_num=self.block_num, freeze_bert=self.freeze_bert, ab_freeze_layer_count=self.ab_freeze_layer_count)
+        clone.load_state_dict(self.state_dict())
+        if self.is_cuda():
+            clone.cuda()
+        return clone
+
+    def get_variables(self,lp=1):
+        self.device=next(self.dense_concat.parameters()).device
+        total_regul=torch.tensor(0,dtype=torch.float,device=self.device)
+        total_param_num = 1
+        for param in self.parameters():
+            total_regul += torch.norm(param, lp) ** 1
+            total_param_num += param.numel()
+        cls_x_regul,cls_y_regul=torch.tensor(0,dtype=torch.float,device=self.device),torch.tensor(0,dtype=torch.float,device=self.device)
+        cls_x_param_num, cls_y_param_num = 1, 1
+
+        return [0.01 * total_regul / total_param_num,0.01*cls_x_regul/cls_x_param_num]
+
+    def forward(self, ag_x, ag_edge_index=None, ag_x_batch=None, ab_x=None, attention_mask_ab_v=None, ab_l=None,
+                attention_mask_ab_l=None, ab_edge_index=None, ab_x_batch=None,ab_bert=None):
+        ag_x = torch.permute(ag_x, [0, 2, 1])
+        ab_x = torch.permute(ab_x, [0, 2, 1])
+        ab_l = torch.permute(ab_l, [0, 2, 1])
+
+        ag_h1 = self.ag_gnn1(ag_x)
+        ag_h1 = self.ag_gnn2(ag_h1)
+
+        # antibody acnn
+        ab_h1 = self.ab_gnn1(ab_x)
+        ab_h1 = self.ab_gnn2(ab_h1)
+
+        ab_l1 = self.ab_gnn1(ab_l)
+        ab_l1 = self.ab_gnn2(ab_l1)
+
+        # predict bind or not
+        x1 = torch.nn.functional.max_pool1d(ag_h1, kernel_size=ag_h1.size()[2:])[..., 0]
+        x2 = torch.nn.functional.max_pool1d(ab_h1, kernel_size=ab_h1.size()[2:])[..., 0]
+        x3 = torch.nn.functional.max_pool1d(ab_l1, kernel_size=ab_l1.size()[2:])[..., 0]
+        # x = torch.cat([self.dropout(x1), self.dropout(x2), self.dropout(x3)], 1)  # batch_size * 124
+        x = torch.cat([x1, x2, x3], 1)  # batch_size * 124
+        x = self.dense_concat(x)
+        x = self.classifier(x + self.res_dense_block(x))
+        x = self.sigmoid(x)
+
+        return [x]
 
 
 class XBCR_ACNN_dense_meta(ReptileModel):
@@ -690,31 +951,7 @@ class XBCR_ACNN_dense_meta(ReptileModel):
                                                                                                         dtype=torch.float,
                                                                                                         device=self.device)
         cls_x_param_num, cls_y_param_num = 1, 1
-        # if self.extra_dense:
-        #     cls_x=[
-        #         self.dense_concat,
-        #         self.res_dense_block1,
-        #         self.res_dense_block2,
-        #         # self.classifier,
-        #     ]
-        #     for model in cls_x:
-        #         # print(model)
-        #         for param in model.parameters():
-        #             cls_x_regul += torch.norm(param, lp) ** 1
-        #             cls_x_param_num += param.numel()
 
-        # if self.extra_classifier:
-        #     cls_y=[
-        #         self.dense_concat_ab,
-        #         self.res_dense_block3,
-        #         self.res_dense_block4,
-        #         # self.classifier_ar,
-        #     ]
-        #     for model in cls_y:
-        #         for param in model.parameters():
-        #             cls_y_regul += torch.norm(param, lp) ** 2
-        #             cls_y_param_num += param.numel()
-        # return [0.01*cls_x_regul/cls_x_param_num,0.01*cls_y_regul/cls_y_param_num]
         return [0.01 * total_regul / total_param_num, 0.01 * cls_x_regul / cls_x_param_num]
 
     def forward(self, ag_x, ab_x=None, attention_mask_ab_v=None, ab_l=None,
@@ -780,13 +1017,13 @@ def _freeze_bert(
         for param in bert_model.embeddings.parameters():
             param.requires_grad = False
         if freeze_layer_count != -1:
-            if freeze_layer_count > 0:
+            if freeze_layer_count > 0 :
                 # freeze layers in bert_model.encoder
                 for layer in bert_model.encoder.layer[:freeze_layer_count]:
                     for param in layer.parameters():
                         param.requires_grad = False
 
-            if freeze_layer_count < 0:
+            if freeze_layer_count < 0 :
                 # freeze layers in bert_model.encoder
                 for layer in bert_model.encoder.layer[freeze_layer_count:]:
                     for param in layer.parameters():
@@ -794,9 +1031,20 @@ def _freeze_bert(
     return None
 
 
+def get_frozen_bert(key_word="prot_bert"):
+    ab_bert=BertModel.from_pretrained(key_word)
+    _freeze_bert(ab_bert, freeze_bert=True, freeze_layer_count=None)
+    return ab_bert
+
+
+def get_unfrozen_bert(key_word="prot_bert",n=28):
+    ab_bert=BertModel.from_pretrained(key_word)
+    _freeze_bert(ab_bert, freeze_bert=False, freeze_layer_count=n)
+    return ab_bert
+
 if __name__ == '__main__':
     model = OmniglotModel(20)
-    x = torch.autograd.Variable(torch.zeros(5, 28 * 28))
+    x = torch.autograd.Variable(torch.zeros(5, 28*28))
     y = model(x)
     print('x', x.size())
     print('y', y.size())

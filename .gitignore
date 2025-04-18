@@ -1,5 +1,6 @@
 Data/*
 Results/*
 Models/*
+External/*
 .idea/*
 **/__pycache__/*

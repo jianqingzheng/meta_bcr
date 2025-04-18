@@ -1,22 +1,18 @@
 import os
+import argparse
 import torch.nn as nn
-import torch.nn.init as init
 from torch.utils.data import DataLoader as DataLoader_n
 import pandas as pd
 import random
-
 from Config.config import get_config
-from MetaBCR.lm_gnn_model_jz import XBCR_ACNN_woBERT_meta
-from MetaBCR.lm_gnn_model_jz0508_unfrozen import XBCR_ACNN_dense_meta
-from MetaBCR.lm_gnn_model_jz import DeepBCR_ACEXN_protbert
-from MetaBCR.lm_gnn_model_jz import Adaptive_Regulariz
-from MetaBCR.dataset_flu import Ab_Dataset, Ab_Dataset_mean_teacher
+from MetaBCR.lm_gnn_model import XBCR_ACNN_woBERT_meta, DeepBCR_ACEXN_protbert
+from MetaBCR.lm_gnn_model import XBCR_ACNN_dense_meta
+from MetaBCR.dataset import Ab_Dataset, Ab_Dataset_mean_teacher
 import MetaBCR.metrics as metrics
 from MetaBCR.losses import *
-from MetaBCR.lm_gnn_model_jz0508_unfrozen import Adaptive_Regulariz
-import utils
+from MetaBCR.lm_gnn_model import Adaptive_Regulariz
+import MetaBCR.utils as utils
 
-##################################################################
 
 def train(num_fold=None, _cfg_=None):
     if num_fold == None:
@@ -39,7 +35,7 @@ def train(num_fold=None, _cfg_=None):
 
     for fold in all_folds:
         
-        result_path = f'Results/{_cfg_.train_mode}/rslt-meta_{_cfg_.model}_{_cfg_.date}_{_cfg_.train_mode}_{_cfg_.prop}_fold{fold}_meta{_cfg_.benchmark}-semi/'
+        result_path = f'Results/{_cfg_.train_mode}/rslt-meta_{_cfg_.model}_{_cfg_.mark}_{_cfg_.train_mode}_{_cfg_.prop}_fold{fold}_meta{_cfg_.benchmark}-semi/'
         if not os.path.exists(result_path):
             print('INFO [ train ] : Cannot find <RESULT DIR>, created a new one.')
             os.makedirs(result_path)
@@ -49,14 +45,14 @@ def train(num_fold=None, _cfg_=None):
 
         #################### dataloader ####################
 
-        data_train_1 = utils.read_table(_cfg_.fdir_train_1.format(fold))
-        data_train_0 = utils.read_table(_cfg_.fdir_train_0.format(fold))
+        data_train_1 = utils.read_tables(_cfg_.fdir_train_1.format(fold))
+        data_train_0 = utils.read_tables(_cfg_.fdir_train_0.format(fold))
 
         data_train_non_experiment_list = []
         for fdir_train_non_exp in _cfg_.fdir_train_non_experiment_list:
-            data_train_non_experiment_list.append(utils.read_table(fdir_train_non_exp))
+            data_train_non_experiment_list.append(utils.read_tables(fdir_train_non_exp))
 
-        data_train_nolabel = utils.read_table(_cfg_.fdir_train_nolabel)
+        data_train_nolabel = utils.read_tables(_cfg_.fdir_train_nolabel)
 
         train_set = Ab_Dataset_mean_teacher(datalist=[data_train_1,
                                                       data_train_0,
@@ -72,27 +68,27 @@ def train(num_fold=None, _cfg_=None):
                                                          'no_label'
                                                          ],
                                             n_samples=max(data_train_1.shape[0] + data_train_0.shape[0], 1024),
-                                            is_rand_sample=True, onehot=_cfg_.use_onehot, rand_shift=True)
+                                            is_rand_sample=True, onehot=_cfg_.use_onehot, rand_shift=True, task=_cfg_.train_mode)
 
         train_loader = DataLoader_n(dataset=train_set, batch_size=_cfg_.batch_sz, shuffle=False)
 
-        data_val_1 = utils.read_table(_cfg_.fdir_val_1.format(fold))
-        data_val_0 = utils.read_table(_cfg_.fdir_val_0.format(fold))
+        data_val_1 = utils.read_tables(_cfg_.fdir_val_1.format(fold))
+        data_val_0 = utils.read_tables(_cfg_.fdir_val_0.format(fold))
 
         data_val = pd.concat([data_val_1, data_val_0], ignore_index=True)
 
         val_set = Ab_Dataset(datalist=[data_val], proportions=[None], sample_func=['sample'],
                              n_samples=data_val.shape[0], is_rand_sample=False, onehot=_cfg_.use_onehot,
-                             rand_shift=False)
+                             rand_shift=False, task=_cfg_.train_mode)
         val_loader = DataLoader_n(dataset=val_set, batch_size=_cfg_.batch_sz, shuffle=False)
         meta_loader = DataLoader_n(dataset=val_set, batch_size=_cfg_.batch_sz, shuffle=False)
 
         tst_loader_dict = {}
         for k,v in _cfg_.fdir_tst_dict.items():
-            data_tst = utils.read_table(v)
+            data_tst = utils.read_tables(v)
             tst_set = Ab_Dataset(datalist=[data_tst], proportions=[None], sample_func=['sample'],
                                 n_samples=data_tst.shape[0], is_rand_sample=False,
-                                onehot=_cfg_.use_onehot, rand_shift=False)
+                                onehot=_cfg_.use_onehot, rand_shift=False, task=_cfg_.train_mode)
             tst_loader = DataLoader_n(dataset=tst_set, batch_size=_cfg_.batch_sz, num_workers=0,
                                         shuffle=False)
             tst_loader_dict[k] = [data_tst, tst_loader]
@@ -109,7 +105,7 @@ def train(num_fold=None, _cfg_=None):
             model.load_state_dict(torch.load(pretrain_model_dir), strict=False)  # 0107
             print(f'INFO [ train ] : Loaded pretrain model params from {pretrain_model_dir}')
         else:
-            model.apply(utils.init_weights)  # Yu 2024/1/4
+            model.apply(utils.init_weights)
             print('INFO [ train ] : No pretrained models, initialize model weights')
 
         supervise_criterion = nn.BCELoss(reduction='none')
@@ -118,14 +114,14 @@ def train(num_fold=None, _cfg_=None):
         optimizer = torch.optim.SGD(model.parameters(), lr=_cfg_.lr)
         # adaptive regularize
         adaptive_regular = Adaptive_Regulariz(velocity=_cfg_.regul_v,
-                                              target_deviation_ratio=_cfg_.regul_tgt_dev_rat)  # velocity=[0.02,0.001], target_deviation_ratio=0.08
-        weight_regulariz_neu = adaptive_regular.weight
+                                              target_deviation_ratio=_cfg_.regul_tgt_dev_rat) 
+        weight_regulariz_obj = adaptive_regular.weight
 
         # train the network
         if _cfg_.train_mode == 'sars+flu':
             _best_val_epoch, best_val_acc, best_val_prec, best_val_f1 = {'sars': 0, 'flu': 0}, {'sars': 0, 'flu': 0}, {
                 'sars': 0, 'flu': 0}, {'sars': 0, 'flu': 0}
-        elif _cfg_.train_mode == 'sars+flu+hiv':  ### 240314
+        elif _cfg_.train_mode == 'sars+flu+hiv':  
             _best_val_epoch, best_val_acc, best_val_prec, best_val_f1 = {'sars': 0, 'flu': 0, 'hiv': 0}, {'sars': 0,
                                                                                                           'flu': 0,
                                                                                                           'hiv': 0}, {
@@ -138,28 +134,23 @@ def train(num_fold=None, _cfg_=None):
 
         # fast model
         fast_model = model.clone_meta(device=_cfg_.device)
-
         fast_optimizer = utils.get_optimizer(fast_model, _cfg_, None)
-        train_acc = []
-        train_loss = []
-        train_epoch = []
-        train_precision = []
-        train_recall = []
+        train_acc, train_loss, train_epoch, train_precision, train_recall = [], [], [], [], []
+        val_loss, val_acc, val_precision, val_recall = [], [], [], []
 
-        val_loss = []
-        val_acc = []
-        val_precision = []
-        val_recall = []
         for epoch in range(_cfg_.num_epochs):
+            
             running_loss = 0.0  # for loss printing
             predictions_tr, labels_tr, has_label_mask_tr = [], [], []
-            weight_regulariz = [weight_regulariz_neu, 0.]
+            weight_regulariz = [weight_regulariz_obj, 0.]
 
             meta_lr = _cfg_.lr * 1e4 * (1.01 - epoch / float(_cfg_.num_epochs))
             utils.set_learning_rate(optimizer, meta_lr)
 
             for i, data in enumerate(train_loader, 0):
+                
                 global_iter += 1
+                
                 # data pre-process
                 input_ids_ab_v = data['input_ids_ab_v'].to(_cfg_.device)
                 attention_mask_ab_v = data['attention_mask_ab_v'].to(_cfg_.device)
@@ -199,13 +190,13 @@ def train(num_fold=None, _cfg_=None):
                     optimizer.step()
                     # fast MAML
                     optimizer.zero_grad()
-                    model.point_grad_to(fast_model, _cfg_.device)  ####
+                    model.point_grad_to(fast_model, _cfg_.device)
                     optimizer.step()
 
                     fast_model.load_state_dict(model.state_dict())
 
                     fast_state = fast_optimizer.state_dict()  # save fast optimizer state
-                    fast_optimizer = utils.get_optimizer(fast_model, _cfg_, state=fast_state)  ####
+                    fast_optimizer = utils.get_optimizer(fast_model, _cfg_, state=fast_state)
 
                     # store predictions and labels
                     predictions_tr.extend(outputs[0].cpu().view(-1).tolist())
@@ -221,7 +212,7 @@ def train(num_fold=None, _cfg_=None):
                         f'INFO [ train ] : Training '
                         f'Epoch {epoch} Iter {i + 1:5d}, '
                         f'loss: {running_loss / _cfg_.print_step:.6f}, '
-                        f'wregul: {weight_regulariz_neu:.3f}')
+                        f'wregul: {weight_regulariz_obj:.3f}')
                     running_loss = 0.0
 
                 # meta
@@ -240,11 +231,11 @@ def train(num_fold=None, _cfg_=None):
                     eval_confusion_val = metrics.eval_confusion(confusion_mat_val)
                     # update regularize weight
                     if _cfg_.benchmark == 'acc':
-                        weight_regulariz_neu = adaptive_regular.update_weight(-eval_confusion_tr[0],
-                                                                              -eval_confusion_val[0])  ### 240314
+                        weight_regulariz_obj = adaptive_regular.update_weight(-eval_confusion_tr[0],
+                                                                              -eval_confusion_val[0])
                     else:
-                        weight_regulariz_neu = adaptive_regular.update_weight(-eval_confusion_tr[6],
-                                                                              -eval_confusion_val[6])  ### 240314
+                        weight_regulariz_obj = adaptive_regular.update_weight(-eval_confusion_tr[6],
+                                                                              -eval_confusion_val[6])
 
             # get train confusion matrix
             confusion_mat_tr = metrics.get_confusion_mat(predictions_tr, labels_tr, has_label_mask_tr)
@@ -254,10 +245,12 @@ def train(num_fold=None, _cfg_=None):
             train_acc.append(eval_confusion_tr[0])
             train_precision.append(eval_confusion_tr[3])
             train_recall.append(eval_confusion_tr[1])
+            
             # validation
             model.eval()
             predictions_val, labels_val, lossweight_val = utils.implement(model, val_loader, _cfg_)
             model.train()
+            
             # get validate confusion matrix
             confusion_mat_val = metrics.get_confusion_mat(
                 [predictions_val[i] for (i, v) in enumerate(lossweight_val) if v == 1],
@@ -282,7 +275,7 @@ def train(num_fold=None, _cfg_=None):
 
                     for tst_name,tst_v in tst_loader_dict.items():
                         data_tst, tst_ldr = tst_v
-                        model_name = f'{_cfg_.date}_{epoch}_fold{fold}-maml'
+                        model_name = f'{_cfg_.mark}_{epoch}_fold{fold}-maml'
                         model.eval()
                         predictions_tst, labels_tst, lossweight_tst = utils.implement(model, tst_ldr, _cfg_)
                         model.train()
@@ -301,7 +294,7 @@ def train(num_fold=None, _cfg_=None):
 
                     for tst_name, tst_v in tst_loader_dict.items():
                         data_tst, tst_ldr = tst_v
-                        model_name = f'{_cfg_.date}_{epoch}_fold{fold}-maml'
+                        model_name = f'{_cfg_.mark}_{epoch}_fold{fold}-maml'
                         model.eval()
                         predictions_tst, labels_tst, lossweight_tst = utils.implement(model, tst_ldr, _cfg_)
                         model.train()
@@ -323,21 +316,37 @@ def train(num_fold=None, _cfg_=None):
                                        'val_loss': val_loss, 'val_acc': val_acc,
                                        'val_precision': val_precision, 'val_recall': val_recall, })
             train_file.to_excel(f'{result_path}{model_name}_train_file.xlsx', index=False)
+        
         print(f'INFO [ train ] : Finished Training, '
               f'best model from epoch {_best_val_epoch}, '
               f'f1 {best_val_f1:.2f}, acc {best_val_acc:.2f}, ppv {best_val_prec:.2f}')
 
+
 if __name__ == '__main__':
-    # flu bind
-    # configure = get_config("Config/config_five_fold_flu_bind_meta_240621_semi_supervise.json")
 
-    # flu neutral
-    # configure = get_config("Config/config_five_fold_flu_neu_meta_240903_unfrozen_semi_supervise.json")
-    
-    # sars bind
-    # configure = get_config("Config/config_five_fold_sars_bind_meta_240612_unfrozen_semi_supervise.json")
+    parser = argparse.ArgumentParser(description="Choose dataset configuration")
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        choices=["flu-bind", "flu-neu", 
+                 "sars-bind", "sars-neu",
+                 "rsv-bind", "rsv-neu"],
+        required=True,
+        help="Choose which dataset configuration to use"
+    )
+    args = parser.parse_args()
 
-    # sars neutral
-    configure = get_config("Config/config_five_fold_sars_neu_meta_new_data_241019_unfrozen_semi_supervise.json")
+    config_paths = {
+        "flu-bind": "Config/config_flu_bind_meta_semi_supervise.json",
+        "flu-neu":  "Config/config_flu_neu_meta_semi_supervise.json",
+        "sars-bind": "Config/config_sars_bind_meta_semi_supervise.json",
+        "sars-neu": "Config/config_sars_neu_meta_semi_supervise.json",
+        "rsv-bind": "Config/config_rsv_bind_meta_semi_supervise.json",
+        "rsv-neu": "Config/config_rsv_neu_meta_semi_supervise.json"
+    }
+
+    config_path = config_paths[args.dataset]
+    configure = get_config(config_path)
 
     train(num_fold=None, _cfg_=configure)
+
