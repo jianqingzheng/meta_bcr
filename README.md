@@ -93,20 +93,6 @@ Directory layout:
 └── ...
 ```
 
-Configuration setting:
-
-<div align="center">
-	
-| Argument              | Example           | Description                                	|
-| --------------------- | ----------------- |----------------------------------------------|
-| `--data_name` 	    |'flu', 'rbd'        | The data  name                    |
-| `--net_name` 	        |'acnn'             | The network name                    |
-| `--ndims` 	        |2, 3                | The dimension of image                    |
-</div>
-
-> configuration settings are edited in `[$DOWNLOAD_DIR]/meta_bcr/Config/*.yaml`
-
-
 ### 2.2. Training ###
 
 Download the data and pretrained models [here](https://drive.google.com/drive/folders/1om6Rt9kvjuebvVd3TrouVkCuTKVWYAjX?usp=sharing).
