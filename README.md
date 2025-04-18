@@ -7,12 +7,6 @@
 
 </div>
 
-<table>
-  <tr>
-    <td><img src="docs/static/images/demo_1.gif" alt="demo_fig1" width="100%" /></td>
-    <td><img src="docs/static/images/demo_2.gif" alt="demo_fig2" width="100%" /></td>
-  </tr>
-</table>
 
 Code for paper [Meta-BCR unveils a germinal center-derived atypical memory B cell subset expressing broadly neutralizing antibodies]()
 
@@ -39,15 +33,6 @@ Code for paper [Meta-BCR unveils a germinal center-derived atypical memory B cel
 
 
 The identification of broadly protective memory B cells is crucial for developing vaccines and antibody therapies, yet the task remains challenging due to its rarity. Meta-BCR, a computational framework integrating meta-learning and the Mean Teacher model, is developed by using single-cell V(D)J sequencing data but without the need for antigen labelling, which is efficient in predicting B-cell receptor (BCR) functionality and identifying rare B cell subsets. Meta-BCR enables the discovery of a conserved subset of germinal centre (GC)-derived atypical memory B cells enriched in broadly neutralizing clonotypes across influenza, SARS-CoV-2, and RSV datasets. These findings highlight key somatic hypermutations (SHMs) associated with enhanced cross-neutralization against viral variants, supported by cryo-EM studies demonstrating that these mutations enhance hydrophobic interactions to promote broader neutralization. Overall, Meta-BCR identifies a unique atypical memory B cell with broad protective potential in the infectious diseases, which may guide the design of effective antiviral strategies.
-
-
-Highlight:
-<ul style="width: auto; height: 200px; overflow: auto; padding:0.4em; margin:0em; text-align:justify; font-size:small">
-  <li> <b>Point1</b>: xxx;
-  </li>
-  <li> <b>Point2</b>: xxx.
-  </li>
-</ul>
 
 ---
 ## 1. Installation ##
