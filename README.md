@@ -59,12 +59,12 @@ cd meta_bcr/
 
 install packages
 
-This project only requires basic packages such as transformer, torch, pandas, etc. Use Anaconda to manage the packages is recommended.
-
 [![OS](https://img.shields.io/badge/OS-Windows%7CLinux-darkblue)]()
 [![PyPI pyversions](https://img.shields.io/badge/Python-3.8-blue)](https://pypi.python.org/pypi/ansicolortags/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-1.12.1+cu113-lightblue)](https://pytorch.org/)
 [![Numpy](https://img.shields.io/badge/Numpy-1.19.5-lightblue)](https://numpy.org)
+
+This project only requires basic packages such as transformer, torch, pandas, etc. Use Anaconda to manage the packages is recommended.
 
 ```shell
 conda create -n metabcr python=3.10
