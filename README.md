@@ -1,5 +1,5 @@
 <div align="center">
-<h1> Meta-BCR (Title) </h1>
+<h1> Meta-BCR </h1>
 
 <a href="https://jianqingzheng.github.io/meta_bcr/"><img alt="Website" src="https://img.shields.io/website?url=https%3A%2F%2Fjianqingzheng.github.io%2Fmeta_bcr%2F&up_message=online&up_color=darkcyan&down_message=offline&down_color=darkgray&label=Project%20Page"></a>
 [![arXiv](https://img.shields.io/badge/arXiv-xxx-b31b1b.svg)]()
@@ -14,7 +14,7 @@
   </tr>
 </table>
 
-Code for paper [Meta-BCR (Title)]()
+Code for paper [Meta-BCR unveils a germinal center-derived atypical memory B cell subset expressing broadly neutralizing antibodies]()
 
 
 > This repo provides an implementation of the training and inference pipeline of **Meta-BCR** based on Pytorch. 
@@ -36,7 +36,7 @@ Code for paper [Meta-BCR (Title)]()
 ## 0. Brief Intro ##
 
 ![header](docs/static/images/graphic_abstract.png)
-Abstract...
+The identification of broadly protective memory B cells is crucial for developing vaccines and antibody therapies, yet the task remains challenging due to its rarity. Meta-BCR, a computational framework integrating meta-learning and the Mean Teacher model, is developed by using single-cell V(D)J sequencing data but without the need for antigen labelling, which is efficient in predicting B-cell receptor (BCR) functionality and identifying rare B cell subsets. Meta-BCR enables the discovery of a conserved subset of germinal centre (GC)-derived atypical memory B cells enriched in broadly neutralizing clonotypes across influenza, SARS-CoV-2, and RSV datasets. These findings highlight key somatic hypermutations (SHMs) associated with enhanced cross-neutralization against viral variants, supported by cryo-EM studies demonstrating that these mutations enhance hydrophobic interactions to promote broader neutralization. Overall, Meta-BCR identifies a unique atypical memory B cell with broad protective potential in the infectious diseases, which may guide the design of effective antiviral strategies.
 
 
 Highlight:
@@ -59,13 +59,17 @@ cd meta_bcr/
 
 install packages
 
+This project only requires basic packages such as transformer, torch, pandas, etc. Use Anaconda to manage the packages is recommended.
+
 [![OS](https://img.shields.io/badge/OS-Windows%7CLinux-darkblue)]()
 [![PyPI pyversions](https://img.shields.io/badge/Python-3.8-blue)](https://pypi.python.org/pypi/ansicolortags/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-1.12.1+cu113-lightblue)](https://pytorch.org/)
 [![Numpy](https://img.shields.io/badge/Numpy-1.19.5-lightblue)](https://numpy.org)
 
 ```shell
-
+conda create -n metabcr python=3.10
+# See torch installation on https://pytorch.org/get-started/locally/
+conda install conda-forge::transformers
 ```
 
 > Other versions of the packages could also be applicable
@@ -79,14 +83,25 @@ install packages
 
 Directory layout:
 ```
-[$DOWNLOAD_DIR]/meta_bcr/ 
+[$DOWNLOAD_DIR]/meta_bcr/
+├── Analysis/
+|   └── ...
 ├── Config/
-|   |   # configure file (.yaml files)
-|   └── config_[$data_name].yaml
+|   |   # configure file (.json files)
+|   └── config_[$data_name].json
+|   └── ...
 ├── Data/
 |   ├── /
 |   └── ...
-├── models/
+├── External/
+|   ├── prot_bert/
+|   └── ...
+├── MetaBCR/
+|   ├── /
+|   └── ...
+├── Models/
+|   └── ...
+├── External/
 |   └── ...
 └── ...
 ```
@@ -107,8 +122,23 @@ Configuration setting:
 
 ### 2.2. Training ###
 
+Download the data and pretrained models [here](https://drive.google.com/drive/folders/1om6Rt9kvjuebvVd3TrouVkCuTKVWYAjX?usp=sharing).
+
+You can run flu-bind training via:
+
+```bash
+conda activate metabcr
+python train_semi_supervise.py --dataset flu-bind
+```
+
 ---
 ## 3. Demo ##
+
+You can test flu bind via:
+
+```bash
+python test_single_cell.py
+```
 
 A demo can be found in the provided [notebook](https://github.com/jianqingzheng/meta_bcr/blob/main/meta_bcr.ipynb).
 
