@@ -111,11 +111,6 @@ You can test flu bind via:
 python test_single_cell.py
 ```
 
-A demo can be found in the provided [notebook](https://github.com/jianqingzheng/meta_bcr/blob/main/meta_bcr.ipynb).
-
-Alternatively, it can be easily run via [![Explore Meta-BCR in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/jianqingzheng/meta_bcr/blob/main/meta_bcr.ipynb).
-
-
 ---
 
 ## 4. Citing this work
