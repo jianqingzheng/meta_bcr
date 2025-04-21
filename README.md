@@ -117,13 +117,8 @@ python test_single_cell.py
 ```
 
 ---
-## 3. Demo ##
 
-
-
----
-
-## 4. Citing this work
+## 3. Citing this work
 
 Any publication that discloses findings arising from using this source code or the network model should cite:
 
