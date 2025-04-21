@@ -110,14 +110,16 @@ conda activate metabcr
 python train_semi_supervise.py --dataset flu-bind
 ```
 
----
-## 3. Demo ##
-
-You can test flu bind via:
+You can test the *flu-bind* single-cell dataset by running the following command:
 
 ```bash
 python test_single_cell.py
 ```
+
+---
+## 3. Demo ##
+
+
 
 ---
 
