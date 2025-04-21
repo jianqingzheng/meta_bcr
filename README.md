@@ -91,7 +91,7 @@ Directory layout:
 └── ...
 ```
 
-### 2.2. Training ###
+### 2.2. Training and Single-Cell Testing ###
 
 To get started, please download the necessary data and pretrained models from the following Google Drive links:
 
