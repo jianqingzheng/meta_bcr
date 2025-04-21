@@ -93,9 +93,17 @@ Directory layout:
 
 ### 2.2. Training ###
 
-Download the data and pretrained models [here](https://drive.google.com/drive/folders/1om6Rt9kvjuebvVd3TrouVkCuTKVWYAjX?usp=sharing).
+To get started, please download the necessary data and pretrained models from the following Google Drive links:
 
-You can run flu-bind training via:
+- **The training and testing data:** Download the contents of the ```Data/``` folder from [this link](https://drive.google.com/drive/folders/1E8jZun1-iUpO8jkWVriW07B4tCZx_BUM?usp=sharing).
+
+- **Pretrained BERT model:** Download the contents of the ```External/``` folder from [this link](https://drive.google.com/drive/folders/10Qoqy0zcM3L7knLG1KGOlUOmXMa2SrLp?usp=sharing).
+
+- **Pretrained MetaBCR models:** Download the following from [this link](https://drive.google.com/drive/folders/1CAQjVVd8SpRdG7xkr4aSMyVNOXeT6Xbn?usp=sharing):
+  - Pretrained MataBCR model in ```Models/240612-flu-bind``` 
+  - The semi-supervised fine-tuned model in ```Models/240822-flu-bind``` 
+
+Once all files are in place, you can run the semi-supervised training on the *flu-bind* dataset using:
 
 ```bash
 conda activate metabcr
